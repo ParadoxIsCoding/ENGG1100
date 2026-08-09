@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# PlatformIO and local macOS development files
+.pio/
+.platformio/
+.venv/
+.DS_Store
