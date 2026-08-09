@@ -137,16 +137,17 @@ The page is stored in the firmware. It is responsive, uses large touch targets, 
 
 ## Controls and safety behaviour
 
-The six movement buttons are hold-to-run: **Forward**, **Reverse**, **Left**, **Right**, **Rotate left**, and **Rotate right**. Pressing **STOP** immediately stops every motor. Pressing **EMERGENCY STOP** stops every motor and latches the stop; movement commands are rejected until **Clear emergency stop** is pressed. Clearing the latch leaves the motors stopped.
+The movement joystick is hold-to-run. Dragging farther from the centre proportionally increases motor power; horizontal and vertical input are mixed so diagonal movement/turning is smooth. The central 12% is a dead zone and commands all motors to stop. The **Rotate left** and **Rotate right** buttons remain hold-to-run. Pressing **STOP** immediately stops every motor. Pressing **EMERGENCY STOP** stops every motor and latches the stop; movement commands are rejected until **Clear emergency stop** is pressed. Clearing the latch leaves the motors stopped.
 
-While a direction is held, the phone refreshes the command every 250 ms. A dedicated firmware safety task checks every 20 ms and stops all motors if no valid movement command arrives for 600 ms; it remains independent of web-request handling. Releasing/cancelling the touch, losing pointer capture, hiding/leaving the page, or moving the browser out of focus also sends a stop. If that request cannot arrive because Wi-Fi disappeared, the independent firmware dead-man timeout still stops the motors.
+While the joystick is held, the phone refreshes its X/Y command every 200 ms (the rotate buttons refresh every 250 ms). A dedicated firmware safety task checks every 20 ms and stops all motors if no valid movement command arrives for 600 ms; it remains independent of web-request handling. Releasing/cancelling the touch, losing pointer capture, hiding/leaving the page, or moving the browser out of focus also sends a stop. The ESP32 additionally stops immediately when a phone disconnects from its Wi-Fi access point. If an interrupted request does not produce a Wi-Fi disconnect event, the independent firmware dead-man timeout remains the final stop path.
 
 Every motion command therefore has these stop paths:
 
-- Release or cancel the held button.
+- Release or cancel the held joystick/button.
 - The on-screen **STOP** button.
 - The latched **EMERGENCY STOP** button.
 - The 600 ms firmware dead-man timeout.
+- A Wi-Fi client disconnect event.
 - Any invalid/missing motion request or unknown route while moving.
 - Reset or power loss. Hardware-mode startup sets the output latch low before enabling each GPIO and then explicitly stops every channel.
 
@@ -158,7 +159,7 @@ Every motion command therefore has these stop paths:
 With the default `esp32-s3-test` firmware and only an ESP32-S3 plus USB cable, you can test:
 
 - Access-point creation, password, phone connection, and offline page loading.
-- Mobile layout, all movement buttons, release-to-stop behaviour, STOP, and emergency-stop latching/clearing.
+- Mobile layout, proportional joystick movement and dead zone, rotate buttons, release-to-stop behaviour, STOP, and emergency-stop latching/clearing.
 - Command receipt in the Serial Monitor; motor messages end with `(simulated)`.
 - The dead-man timeout by holding a movement control and then disabling the phone's Wi-Fi or moving out of range. The Serial Monitor should show `[safety] stop: dead-man timeout` within about 600 ms of the last received command.
 - Rejection of movement while emergency stop is latched.
@@ -254,7 +255,7 @@ Do not assume a pin labelled `D4` is GPIO 4. Use the GPIO number printed in the 
 ## Bench-test order
 
 1. Build and upload test mode with no external hardware.
-2. Exercise every control and verify serial stop messages.
+2. Exercise the joystick across its full range and dead zone, then every other control, and verify serial stop messages.
 3. Verify the dead-man timeout by breaking the phone connection while moving.
 4. Latch emergency stop, confirm all movement is rejected, clear it, and confirm motion remains stopped.
 5. Wire drivers with 12 V isolated; verify 5 V buck output and idle input levels using a multimeter.

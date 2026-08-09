@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <WebServer.h>
 #include <WiFi.h>
+#include <stdlib.h>
 
 #include "config.h"
 #include "motor_controller.h"
@@ -35,13 +36,37 @@ void applyMotion(Motion motion) {
   xSemaphoreGive(motorMutex);
 }
 
+void applyJoystick(int8_t xPercent, int8_t yPercent) {
+  if (motorMutex == nullptr ||
+      xSemaphoreTake(motorMutex, pdMS_TO_TICKS(50)) != pdTRUE) {
+    motionActive = false;
+    return;
+  }
+  motors.applyJoystick(xPercent, yPercent);
+  xSemaphoreGive(motorMutex);
+}
+
+int8_t currentJoystickAxis(bool xAxis) {
+  if (motorMutex == nullptr ||
+      xSemaphoreTake(motorMutex, pdMS_TO_TICKS(50)) != pdTRUE) {
+    return 0;
+  }
+  const int8_t result = xAxis ? motors.joystickX() : motors.joystickY();
+  xSemaphoreGive(motorMutex);
+  return result;
+}
+
 String statusJson() {
   String json;
-  json.reserve(100);
+  json.reserve(140);
   json = F("{\"motion\":\"");
   json += motionName(currentMotion());
   json += F("\",\"estop\":");
   json += emergencyStopLatched ? F("true") : F("false");
+  json += F(",\"x\":");
+  json += static_cast<int>(currentJoystickAxis(true));
+  json += F(",\"y\":");
+  json += static_cast<int>(currentJoystickAxis(false));
   json += F(",\"testMode\":");
 #if TEST_MODE
   json += F("true");
@@ -50,6 +75,16 @@ String statusJson() {
 #endif
   json += F("}");
   return json;
+}
+
+bool parsePercent(const String& value, int8_t& result) {
+  char* end = nullptr;
+  const long parsed = strtol(value.c_str(), &end, 10);
+  if (end == value.c_str() || *end != '\0' || parsed < -100 || parsed > 100) {
+    return false;
+  }
+  result = static_cast<int8_t>(parsed);
+  return true;
 }
 
 void sendJson(int code, const String& body) {
@@ -81,6 +116,13 @@ void safetyTask(void*) {
   }
 }
 
+void handleClientDisconnected(WiFiEvent_t event, WiFiEventInfo_t info) {
+  (void)event;
+  (void)info;
+  motionActive = false;
+  stopForSafety("Wi-Fi client disconnected");
+}
+
 void handleMove() {
   if (emergencyStopLatched) {
     sendJson(423, F("{\"error\":\"Emergency stop is latched\"}"));
@@ -103,6 +145,29 @@ void handleMove() {
 
   lastValidMotionMs = millis();
   applyMotion(requested);
+  motionActive = currentMotion() != Motion::Stopped;
+  sendJson(200, statusJson());
+}
+
+void handleDrive() {
+  if (emergencyStopLatched) {
+    sendJson(423, F("{\"error\":\"Emergency stop is latched\"}"));
+    return;
+  }
+
+  int8_t xPercent = 0;
+  int8_t yPercent = 0;
+  if (!server.hasArg("x") || !server.hasArg("y") ||
+      !parsePercent(server.arg("x"), xPercent) ||
+      !parsePercent(server.arg("y"), yPercent)) {
+    motionActive = false;
+    stopForSafety("invalid joystick vector");
+    sendJson(400, F("{\"error\":\"X and Y must be integers from -100 to 100\"}"));
+    return;
+  }
+
+  lastValidMotionMs = millis();
+  applyJoystick(xPercent, yPercent);
   motionActive = currentMotion() != Motion::Stopped;
   sendJson(200, statusJson());
 }
@@ -138,6 +203,7 @@ void configureServer() {
   server.on("/api/status", HTTP_GET,
             []() { sendJson(200, statusJson()); });
   server.on("/api/move", HTTP_POST, handleMove);
+  server.on("/api/drive", HTTP_POST, handleDrive);
   server.on("/api/stop", HTTP_POST, handleStop);
   server.on("/api/estop", HTTP_POST, handleEmergencyStop);
   server.on("/api/estop/clear", HTTP_POST, handleClearEmergencyStop);
@@ -166,6 +232,8 @@ void setup() {
   motionActive = false;
   lastValidMotionMs = 0;
 
+  WiFi.onEvent(handleClientDisconnected,
+               ARDUINO_EVENT_WIFI_AP_STADISCONNECTED);
   WiFi.mode(WIFI_AP);
   if (!WiFi.softAP(Config::kAccessPointName,
                    Config::kAccessPointPassword)) {

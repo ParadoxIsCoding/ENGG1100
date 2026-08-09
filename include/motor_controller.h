@@ -10,6 +10,7 @@ enum class Motion : uint8_t {
   Right,
   RotateLeft,
   RotateRight,
+  Joystick,
 };
 
 class MotorController {
@@ -21,14 +22,19 @@ class MotorController {
 
   void begin();
   void apply(Motion motion);
+  void applyJoystick(int8_t xPercent, int8_t yPercent);
   void stop();
   Motion motion() const;
+  int8_t joystickX() const;
+  int8_t joystickY() const;
 
  private:
-  void drive(const MotorPins& motor, int8_t direction);
+  void drive(const MotorPins& motor, int16_t powerPercent);
   void logMotion(Motion motion) const;
 
   Motion motion_ = Motion::Stopped;
+  int8_t joystickX_ = 0;
+  int8_t joystickY_ = 0;
 };
 
 const char* motionName(Motion motion);

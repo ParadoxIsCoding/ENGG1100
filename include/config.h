@@ -12,6 +12,9 @@ constexpr char kAccessPointName[] = "ENGG1100-StationKeeper";
 constexpr char kAccessPointPassword[] = "station1100";
 constexpr uint16_t kHttpPort = 80;
 constexpr uint32_t kDeadmanTimeoutMs = 600;
+constexpr uint8_t kJoystickDeadZonePercent = 12;
+constexpr uint16_t kMotorPwmFrequencyHz = 20000;
+constexpr uint8_t kMotorPwmResolutionBits = 8;
 
 // Change these only after checking the pinout for the exact ESP32-S3 board.
 // Each L9110S motor channel uses two logic inputs.
