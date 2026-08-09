@@ -3,6 +3,7 @@
 #include <WiFi.h>
 #include <stdlib.h>
 
+#include "attitude_sensor.h"
 #include "config.h"
 #include "motor_controller.h"
 #include "web_page.h"
@@ -11,6 +12,7 @@ namespace {
 
 WebServer server(Config::kHttpPort);
 MotorController motors;
+AttitudeSensor attitude;
 SemaphoreHandle_t motorMutex = nullptr;
 bool emergencyStopLatched = false;
 volatile bool motionActive = false;
@@ -57,8 +59,9 @@ int8_t currentJoystickAxis(bool xAxis) {
 }
 
 String statusJson() {
+  attitude.update();
   String json;
-  json.reserve(140);
+  json.reserve(210);
   json = F("{\"motion\":\"");
   json += motionName(currentMotion());
   json += F("\",\"estop\":");
@@ -73,6 +76,12 @@ String statusJson() {
 #else
   json += F("false");
 #endif
+  json += F(",\"pitch\":");
+  json += String(attitude.pitchDegrees(), 1);
+  json += F(",\"roll\":");
+  json += String(attitude.rollDegrees(), 1);
+  json += F(",\"attitudeDemo\":");
+  json += attitude.demoMode() ? F("true") : F("false");
   json += F("}");
   return json;
 }
@@ -195,6 +204,12 @@ void handleClearEmergencyStop() {
   sendJson(200, statusJson());
 }
 
+void handleSetLevel() {
+  attitude.setLevel();
+  Serial.println("[attitude] current position set as level");
+  sendJson(200, statusJson());
+}
+
 void configureServer() {
   server.on("/", HTTP_GET, []() {
     server.sendHeader("Cache-Control", "no-store");
@@ -207,6 +222,7 @@ void configureServer() {
   server.on("/api/stop", HTTP_POST, handleStop);
   server.on("/api/estop", HTTP_POST, handleEmergencyStop);
   server.on("/api/estop/clear", HTTP_POST, handleClearEmergencyStop);
+  server.on("/api/attitude/level", HTTP_POST, handleSetLevel);
   server.onNotFound([]() {
     stopForSafety("unknown request");
     sendJson(404, F("{\"error\":\"Not found\"}"));
@@ -220,6 +236,7 @@ void setup() {
   // Motor safety is established before Wi-Fi or the web server starts.
   Serial.begin(115200);
   motors.begin();
+  attitude.begin();
   motorMutex = xSemaphoreCreateMutex();
   if (motorMutex == nullptr ||
       xTaskCreate(safetyTask, "motor-safety", 2048, nullptr, 3, nullptr) !=

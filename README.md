@@ -14,10 +14,12 @@ ENGG1100/
 ├── platformio.ini                 PlatformIO board and build environments
 ├── include/
 │   ├── config.h                   Wi-Fi, timeout, GPIO, and future I2C settings
+│   ├── attitude_sensor.h          Pitch/roll interface and level calibration
 │   ├── motor_controller.h         Motion interface
 │   └── web_page.h                 Embedded offline mobile web app
 ├── src/
 │   ├── main.cpp                   Wi-Fi, HTTP API, safety logic, and startup
+│   ├── attitude_sensor.cpp        Temporary demo attitude source / IMU hook
 │   └── motor_controller.cpp       Four-motor mixing and safe output control
 └── README.md                      Setup, use, wiring, and troubleshooting
 ```
@@ -222,6 +224,8 @@ The motion mix is a starting point and must be verified against the real motor o
 ## Future MPU6050 wiring
 
 The MPU6050 is reserved for later station-keeping feedback and is not accessed by this firmware yet.
+
+The web controller currently runs a smooth pitch/roll demo so the artificial horizon and **Set Level** calibration can be tested without sensor hardware. To connect the physical IMU, initialise it in `AttitudeSensor::begin()` and replace the two clearly labelled placeholder assignments in `AttitudeSensor::update()` (`src/attitude_sensor.cpp`) with filtered pitch and roll values in degrees. Then set `kUseSmoothDemoMode` to `false`. The web API and interface need no other changes.
 
 | MPU6050 | ESP32-S3 | Notes |
 |---|---:|---|

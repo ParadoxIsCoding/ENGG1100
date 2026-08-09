@@ -21,6 +21,30 @@ const char kControlPage[] PROGMEM = R"HTML(
     .panel { margin-top: 1rem; padding: 1rem; background: #101d2d; border: 1px solid #263b52; border-radius: 1rem; }
     #mode { color: #9dc7f1; font-size: .9rem; }
     #state { margin: .35rem 0 0; font-size: 1.15rem; font-weight: 700; }
+    .attitude-panel { display: grid; justify-items: center; gap: .7rem; }
+    .attitude-heading { width: 100%; display: flex; align-items: baseline; justify-content: space-between; gap: .75rem; }
+    .attitude-heading h2 { margin: 0; font-size: 1rem; }
+    #attitude-source { color: #8da8c0; font-size: .72rem; letter-spacing: .04em; }
+    .horizon { position: relative; width: min(58vw,12.5rem); aspect-ratio: 1; overflow: hidden; border: 3px solid #60758c; border-radius: 50%; background: #132131; box-shadow: inset 0 0 1.2rem #000b,0 .45rem 1rem #03091288; }
+    .horizon-world { position: absolute; left: 50%; top: 50%; width: 320%; height: 320%; background: linear-gradient(to bottom,#2378b7 0 49.7%,#f3f4f4 49.7% 50.3%,#8b542e 50.3% 100%); transform: translate(-50%,-50%); transition: transform 140ms linear; will-change: transform; }
+    .pitch-line { position: absolute; left: 50%; width: 2rem; height: 1px; background: #fff; box-shadow: 0 1px #0008; transform: translateX(-50%); }
+    .pitch-line.long { width: 3.2rem; }
+    .p-up-10 { top: calc(50% - 20px); } .p-up-5 { top: calc(50% - 10px); }
+    .p-down-5 { top: calc(50% + 10px); } .p-down-10 { top: calc(50% + 20px); }
+    .bank-marks { position: absolute; inset: .35rem; border-top: 2px solid #fff; border-radius: 50%; pointer-events: none; }
+    .bank-pointer { position: absolute; top: .3rem; left: 50%; width: 0; height: 0; border-left: .34rem solid transparent; border-right: .34rem solid transparent; border-top: .55rem solid #fff; transform: translateX(-50%); }
+    .aircraft { position: absolute; left: 50%; top: 50%; width: 58%; height: 1.7rem; transform: translate(-50%,-50%); pointer-events: none; }
+    .aircraft::before,.aircraft::after { content: ''; position: absolute; top: .72rem; width: 38%; height: .22rem; border: 1px solid #171717; background: #ffd43b; }
+    .aircraft::before { left: 0; transform: rotate(8deg); transform-origin: right; }
+    .aircraft::after { right: 0; transform: rotate(-8deg); transform-origin: left; }
+    .aircraft-centre { position: absolute; left: 50%; top: 50%; width: .65rem; aspect-ratio: 1; border: .18rem solid #171717; border-radius: 50%; background: #ffd43b; transform: translate(-50%,-50%); }
+    .attitude-readings { display: grid; width: 100%; grid-template-columns: 1fr 1fr auto; align-items: center; gap: .55rem; }
+    .attitude-value { padding: .5rem .35rem; border: 1px solid #31475f; border-radius: .65rem; background: #0c1928; text-align: center; }
+    .attitude-value span { display: block; color: #9db0c4; font-size: .68rem; font-weight: 700; letter-spacing: .08em; }
+    .attitude-value strong { display: block; margin-top: .08rem; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+    #tilt-status { grid-column: 1 / -1; justify-self: center; padding: .28rem .7rem; border: 1px solid currentColor; border-radius: 999px; font-size: .72rem; font-weight: 800; letter-spacing: .06em; }
+    .tilt-green { color: #70f0b0; } .tilt-amber { color: #ffc85c; } .tilt-red { color: #ff7a86; }
+    .level { min-height: 3rem; padding: 0 .8rem; white-space: nowrap; }
     .controls { display: flex; flex-direction: column; align-items: center; gap: 1rem; margin-top: 1rem; }
     button { min-height: 4.25rem; border: 1px solid #49627f; border-radius: .85rem; background: #172b42; color: inherit; font: inherit; font-weight: 750; touch-action: none; user-select: none; }
     button:active,.active { background: #2073b8; transform: scale(.98); }
@@ -52,6 +76,23 @@ const char kControlPage[] PROGMEM = R"HTML(
     <div id="mode">Loading controller status…</div>
     <p id="state">STOPPED</p>
   </section>
+  <section class="panel attitude-panel" aria-label="Live pitch and roll">
+    <div class="attitude-heading"><h2>Artificial Horizon</h2><span id="attitude-source">ATTITUDE</span></div>
+    <div class="horizon" role="img" aria-label="Artificial horizon">
+      <div id="horizon-world" class="horizon-world">
+        <i class="pitch-line long p-up-10"></i><i class="pitch-line p-up-5"></i>
+        <i class="pitch-line p-down-5"></i><i class="pitch-line long p-down-10"></i>
+      </div>
+      <div class="bank-marks"></div><div class="bank-pointer"></div>
+      <div class="aircraft"><i class="aircraft-centre"></i></div>
+    </div>
+    <div class="attitude-readings">
+      <div class="attitude-value"><span>PITCH</span><strong id="pitch">0.0°</strong></div>
+      <div class="attitude-value"><span>ROLL</span><strong id="roll">0.0°</strong></div>
+      <button class="level" id="set-level">Set Level</button>
+      <span id="tilt-status" class="tilt-green">LEVEL</span>
+    </div>
+  </section>
   <section class="controls" aria-label="Hold-to-run motion controls">
     <div id="joystick" class="joystick" role="application" tabindex="0" aria-label="Movement joystick. Hold and drag in any direction." aria-describedby="control-hint">
       <span class="axis axis-up">FORWARD</span>
@@ -78,6 +119,11 @@ const char kControlPage[] PROGMEM = R"HTML(
   const reset = document.querySelector('#reset');
   const joystick = document.querySelector('#joystick');
   const stick = document.querySelector('#stick');
+  const horizonWorld = document.querySelector('#horizon-world');
+  const pitchValue = document.querySelector('#pitch');
+  const rollValue = document.querySelector('#roll');
+  const tiltStatus = document.querySelector('#tilt-status');
+  const attitudeSource = document.querySelector('#attitude-source');
   const deadZone = .12;
   let heldMotion = null;
   let joystickPointer = null;
@@ -112,6 +158,33 @@ const char kControlPage[] PROGMEM = R"HTML(
     state.textContent = data.estop ? 'EMERGENCY STOP LATCHED' :
       data.motion === 'joystick' ? `JOYSTICK  X ${data.x} · Y ${data.y}` : data.motion.toUpperCase();
     reset.hidden = !data.estop;
+    renderAttitude(data);
+  }
+
+  function renderAttitude(data) {
+    if (!Number.isFinite(data.pitch) || !Number.isFinite(data.roll)) return;
+    const pitch = data.pitch;
+    const roll = data.roll;
+    horizonWorld.style.transform = `translate(-50%,calc(-50% + ${pitch * 2}px)) rotate(${-roll}deg)`;
+    pitchValue.textContent = `${pitch.toFixed(1)}°`;
+    rollValue.textContent = `${roll.toFixed(1)}°`;
+    const tilt = Math.max(Math.abs(pitch), Math.abs(roll));
+    const level = tilt < 5 ? ['LEVEL','tilt-green'] : tilt <= 10 ? ['CAUTION','tilt-amber'] : ['HIGH TILT','tilt-red'];
+    tiltStatus.textContent = level[0];
+    tiltStatus.className = level[1];
+    attitudeSource.textContent = data.attitudeDemo ? 'SMOOTH DEMO' : 'LIVE IMU';
+    document.querySelector('.horizon').setAttribute('aria-label', `Pitch ${pitch.toFixed(1)} degrees, roll ${roll.toFixed(1)} degrees`);
+  }
+
+  async function refreshStatus() {
+    try {
+      const response = await fetch('/api/status', {cache:'no-store'});
+      if (!response.ok) throw new Error(response.statusText);
+      render(await response.json());
+    } catch (error) {
+      connection.textContent = 'Disconnected';
+      connection.className = 'pill offline';
+    }
   }
 
   function clearMotionState() {
@@ -217,12 +290,14 @@ const char kControlPage[] PROGMEM = R"HTML(
   document.querySelector('#stop').addEventListener('click', () => { endMotion(false); post('/api/stop'); });
   document.querySelector('#estop').addEventListener('click', () => { endMotion(false); post('/api/estop'); });
   reset.addEventListener('click', () => post('/api/estop/clear'));
+  document.querySelector('#set-level').addEventListener('click', () => post('/api/attitude/level'));
   window.addEventListener('blur', endMotion);
   window.addEventListener('offline', endMotion);
   window.addEventListener('pagehide', stopForPageExit);
   document.addEventListener('visibilitychange', () => document.hidden && stopForPageExit());
   window.addEventListener('contextmenu', event => event.preventDefault());
-  fetch('/api/status', {cache:'no-store'}).then(r => r.json()).then(render).catch(() => {});
+  refreshStatus();
+  setInterval(refreshStatus, 150);
 })();
 </script>
 </body>
