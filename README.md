@@ -1,6 +1,6 @@
 # ENGG1100 Station-Keeping Controller
 
-This repository contains the ESP32-S3 firmware and phone-friendly web controller for Team Lavender's station-keeping flood-resistant evacuation-centre prototype. The ESP32 creates its own Wi-Fi network and serves the control page directly, so the controller does **not** need an internet connection while operating.
+This repository contains the ESP32-S3 firmware and phone-friendly web controller for Team Lavender's station-keeping flood-resistant evacuation-centre prototype. The planned attitude sensor is a **GY-521 module containing the MPU6050 6-axis IMU** (3-axis accelerometer plus 3-axis gyroscope). The ESP32 creates its own Wi-Fi network and serves the control page directly, so the controller does **not** need an internet connection while operating.
 
 The default build is **test mode**. It runs the complete Wi-Fi, web interface, command, dead-man timeout, and emergency-stop logic without enabling any motor GPIO. This makes it safe to test with only an ESP32-S3 and USB cable.
 
@@ -13,13 +13,13 @@ The default build is **test mode**. It runs the complete Wi-Fi, web interface, c
 ENGG1100/
 ├── platformio.ini                 PlatformIO board and build environments
 ├── include/
-│   ├── config.h                   Wi-Fi, timeout, GPIO, and future I2C settings
+│   ├── config.h                   Wi-Fi, timeout, GPIO, and GY-521 I2C settings
 │   ├── attitude_sensor.h          Pitch/roll interface and level calibration
 │   ├── motor_controller.h         Motion interface
 │   └── web_page.h                 Embedded offline mobile web app
 ├── src/
 │   ├── main.cpp                   Wi-Fi, HTTP API, safety logic, and startup
-│   ├── attitude_sensor.cpp        Temporary demo attitude source / IMU hook
+│   ├── attitude_sensor.cpp        Temporary demo attitude source / GY-521 hook
 │   └── motor_controller.cpp       Four-motor mixing and safe output control
 └── README.md                      Setup, use, wiring, and troubleshooting
 ```
@@ -221,22 +221,50 @@ Add a 10 kΩ pull-down from each of the eight L9110S input lines to ground so th
 
 The motion mix is a starting point and must be verified against the real motor orientation. All direction changes first stop every channel. Mechanical placement may require swapping individual motor output wires or revising the mix after controlled testing.
 
-## Future MPU6050 wiring
+## GY-521 MPU6050 IMU
 
-The MPU6050 is reserved for later station-keeping feedback and is not accessed by this firmware yet.
+The selected sensor is the **GY-521 MPU6050 6DOF IMU module**. It measures acceleration and angular velocity on three axes. The controller will use those measurements to estimate pitch and roll for levelling and, later, station-keeping feedback. It does not provide an absolute compass heading because the MPU6050 has no magnetometer. Electrical and register details are in the [official MPU-6000/MPU-6050 product specification](https://invensense.tdk.com/wp-content/uploads/2015/02/MPU-6000-Datasheet.pdf).
 
-The web controller currently runs a smooth pitch/roll demo so the artificial horizon and **Set Level** calibration can be tested without sensor hardware. To connect the physical IMU, initialise it in `AttitudeSensor::begin()` and replace the two clearly labelled placeholder assignments in `AttitudeSensor::update()` (`src/attitude_sensor.cpp`) with filtered pitch and roll values in degrees. Then set `kUseSmoothDemoMode` to `false`. The web API and interface need no other changes.
+The web controller currently runs a smooth pitch/roll demo, so connecting the module alone will **not** change the artificial horizon yet. The physical driver still needs to be initialised in `AttitudeSensor::begin()`, and the placeholders in `AttitudeSensor::update()` (`src/attitude_sensor.cpp`) need to be replaced with calibrated, filtered pitch and roll values. Then `kUseSmoothDemoMode` can be set to `false`; the web API and interface need no other changes.
 
-| MPU6050 | ESP32-S3 | Notes |
+### IMU pin connections
+
+| GY-521 pin | ESP32-S3 connection | Purpose |
 |---|---:|---|
-| VCC | 3.3 V | Use 3.3 V unless the exact breakout explicitly supports another input voltage |
-| GND | GND | Common ground |
-| SDA | GPIO 8 | Reserved in `include/config.h` |
-| SCL | GPIO 9 | Reserved in `include/config.h` |
-| AD0 | GND | Default I2C address `0x68` |
-| INT | Not connected | Can be assigned later if interrupt-driven sampling is required |
+| `VCC` | `3V3` | Powers the module and keeps its I2C pull-ups at a safe 3.3 V logic level |
+| `GND` | `GND` | Common logic/power ground |
+| `SCL` | GPIO 9 | I2C clock; reserved as `kI2cScl` in `include/config.h` |
+| `SDA` | GPIO 8 | I2C data; reserved as `kI2cSda` in `include/config.h` |
+| `XDA` | Not connected | Auxiliary I2C data for an optional external sensor |
+| `XCL` | Not connected | Auxiliary I2C clock for an optional external sensor |
+| `AD0` | `GND` | Selects the default 7-bit I2C address `0x68` |
+| `INT` | Not connected | Optional data-ready/motion interrupt; polling does not require it |
 
-Keep I2C wires short and route them away from motor wires. Many breakout boards contain pull-ups, so check before adding more. Motor noise may require local decoupling, twisted motor leads, and filtering after measurement.
+> [!IMPORTANT]
+> Power this GY-521 from the ESP32's **3.3 V** pin for this design. Some sellers describe GY-521 boards as 3–5 V modules because many versions include a regulator, but board layouts and pull-up wiring vary. Using 3.3 V avoids exposing the ESP32-S3's I2C pins to 5 V. Never connect the IMU to the 12 V motor rail.
+
+### IMU wiring diagram
+
+```text
+ESP32-S3                                      GY-521 / MPU6050
+
+3V3  --------------------------------------  VCC
+GND  ------------------+-------------------  GND
+                       +-------------------  AD0  (address 0x68)
+GPIO 9  -----------------------------------  SCL
+GPIO 8  -----------------------------------  SDA
+
+                                              XDA  not connected
+                                              XCL  not connected
+                                              INT  not connected
+
+The GY-521 GND joins the same common ground as the ESP32, buck converter,
+motor drivers, and 12 V supply negative. Its VCC connects only to ESP32 3V3.
+```
+
+The pin order printed on the module may run in either direction, so wire by the **printed pin labels**, not by physical position in a picture. After the driver is added, an I2C scan should find `0x68`; if it does not, first check 3.3 V, ground, SDA/SCL order, solder joints, and the `AD0` connection. Pulling `AD0` high changes the address to `0x69`.
+
+Mount the board rigidly and flat, above the expected water line, with its component/axis side facing up. Record which printed X/Y arrow points toward the front of the platform so the pitch and roll signs can be corrected in software. Keep the I2C wires short and away from motor leads. Most GY-521 boards already include I2C pull-ups, so do not add another set unless measurement shows they are needed. Motor noise may require twisted motor leads, local decoupling, and software filtering.
 
 ## GPIO warning
 
