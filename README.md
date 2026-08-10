@@ -1,6 +1,6 @@
 # ENGG1100 Station-Keeping Controller
 
-This repository contains the ESP32-S3 firmware and phone-friendly web controller for Team Lavender's station-keeping flood-resistant evacuation-centre prototype. The planned attitude sensor is a **GY-521 module containing the MPU6050 6-axis IMU** (3-axis accelerometer plus 3-axis gyroscope). The ESP32 creates its own Wi-Fi network and serves the control page directly, so the controller does **not** need an internet connection while operating.
+This repository contains the ESP32-S3 firmware and phone-friendly web controller for Team Lavender's station-keeping flood-resistant evacuation-centre prototype. The attitude sensor is a **GY-521 module containing the MPU6050 6-axis IMU** (3-axis accelerometer plus 3-axis gyroscope). The ESP32 creates its own Wi-Fi network and serves the control page directly, so the controller does **not** need an internet connection while operating.
 
 The default build is **test mode**. It runs the complete Wi-Fi, web interface, command, dead-man timeout, and emergency-stop logic without enabling any motor GPIO. This makes it safe to test with only an ESP32-S3 and USB cable.
 
@@ -19,7 +19,7 @@ ENGG1100/
 │   └── web_page.h                 Embedded offline mobile web app
 ├── src/
 │   ├── main.cpp                   Wi-Fi, HTTP API, safety logic, and startup
-│   ├── attitude_sensor.cpp        Temporary demo attitude source / GY-521 hook
+│   ├── attitude_sensor.cpp        Attitude source, calibration, and GY-521 integration point
 │   └── motor_controller.cpp       Four-motor mixing and safe output control
 └── README.md                      Setup, use, wiring, and troubleshooting
 ```
@@ -83,7 +83,7 @@ cd ~/Desktop/ENGG1100
 
 In VS Code, use **PlatformIO > Project Tasks > esp32-s3-test > General > Build**, or select the check-mark button in the bottom status bar (the default environment is test mode).
 
-To compile the future physical motor build:
+To compile the motor-enabled hardware build:
 
 ```bash
 .venv/bin/pio run -e esp32-s3-hardware
@@ -172,7 +172,7 @@ Test mode never configures the motor pins as outputs. No L9110S, motor, MPU6050,
 
 1. Disconnect the 12 V motor supply and keep the physical motor-power switch off.
 2. Confirm the exact ESP32-S3 board pinout and update the pins in `include/config.h` if required.
-3. Complete the future wiring below and use a multimeter to set the buck converter to **5.0 V before connecting it to the ESP32**.
+3. Complete the hardware wiring below and use a multimeter to set the buck converter to **5.0 V before connecting it to the ESP32**.
 4. Compile and upload the `esp32-s3-hardware` environment:
 
    ```bash
@@ -187,7 +187,7 @@ Test mode never configures the motor pins as outputs. No L9110S, motor, MPU6050,
 
 `TEST_MODE` is set per environment in `platformio.ini`; no source edit is needed.
 
-## Future L9110S wiring
+## L9110S wiring
 
 The design assumes four N20 motors and two dual-channel L9110S boards. Labels vary (`A-IA`/`A-IB`, `B-IA`/`B-IB`, `VCC`, `GND`, `OA`/`OB`), so verify the markings and datasheet for the exact modules.
 
@@ -223,9 +223,9 @@ The motion mix is a starting point and must be verified against the real motor o
 
 ## GY-521 MPU6050 IMU
 
-The selected sensor is the **GY-521 MPU6050 6DOF IMU module**. It measures acceleration and angular velocity on three axes. The controller will use those measurements to estimate pitch and roll for levelling and, later, station-keeping feedback. It does not provide an absolute compass heading because the MPU6050 has no magnetometer. Electrical and register details are in the [official MPU-6000/MPU-6050 product specification](https://invensense.tdk.com/wp-content/uploads/2015/02/MPU-6000-Datasheet.pdf).
+The selected sensor is the **GY-521 MPU6050 6DOF IMU module**. It measures acceleration and angular velocity on three axes, providing the inputs for pitch and roll estimation, levelling, and station-keeping feedback. It does not provide an absolute compass heading because the MPU6050 has no magnetometer. Electrical and register details are in the [official MPU-6000/MPU-6050 product specification](https://invensense.tdk.com/wp-content/uploads/2015/02/MPU-6000-Datasheet.pdf).
 
-The web controller currently runs a smooth pitch/roll demo, so connecting the module alone will **not** change the artificial horizon yet. The physical driver still needs to be initialised in `AttitudeSensor::begin()`, and the placeholders in `AttitudeSensor::update()` (`src/attitude_sensor.cpp`) need to be replaced with calibrated, filtered pitch and roll values. Then `kUseSmoothDemoMode` can be set to `false`; the web API and interface need no other changes.
+**Current firmware status:** the web controller uses a smooth pitch/roll demo so the artificial horizon and **Set Level** control can be tested without sensor hardware. GY-521 readings are not enabled in this revision, so connecting the module alone does not change the displayed attitude. The integration points are `AttitudeSensor::begin()` and `AttitudeSensor::update()` in `src/attitude_sensor.cpp`; the web API and interface already accept pitch and roll values.
 
 ### IMU pin connections
 
@@ -233,8 +233,8 @@ The web controller currently runs a smooth pitch/roll demo, so connecting the mo
 |---|---:|---|
 | `VCC` | `3V3` | Powers the module and keeps its I2C pull-ups at a safe 3.3 V logic level |
 | `GND` | `GND` | Common logic/power ground |
-| `SCL` | GPIO 9 | I2C clock; reserved as `kI2cScl` in `include/config.h` |
-| `SDA` | GPIO 8 | I2C data; reserved as `kI2cSda` in `include/config.h` |
+| `SCL` | GPIO 9 | I2C clock; assigned as `kI2cScl` in `include/config.h` |
+| `SDA` | GPIO 8 | I2C data; assigned as `kI2cSda` in `include/config.h` |
 | `XDA` | Not connected | Auxiliary I2C data for an optional external sensor |
 | `XCL` | Not connected | Auxiliary I2C clock for an optional external sensor |
 | `AD0` | `GND` | Selects the default 7-bit I2C address `0x68` |
@@ -262,7 +262,7 @@ The GY-521 GND joins the same common ground as the ESP32, buck converter,
 motor drivers, and 12 V supply negative. Its VCC connects only to ESP32 3V3.
 ```
 
-The pin order printed on the module may run in either direction, so wire by the **printed pin labels**, not by physical position in a picture. After the driver is added, an I2C scan should find `0x68`; if it does not, first check 3.3 V, ground, SDA/SCL order, solder joints, and the `AD0` connection. Pulling `AD0` high changes the address to `0x69`.
+The pin order printed on the module may run in either direction, so wire by the **printed pin labels**, not by physical position in a picture. An I2C scan on the configured bus should find `0x68`; if it does not, first check 3.3 V, ground, SDA/SCL order, solder joints, and the `AD0` connection. Pulling `AD0` high changes the address to `0x69`.
 
 Mount the board rigidly and flat, above the expected water line, with its component/axis side facing up. Record which printed X/Y arrow points toward the front of the platform so the pitch and roll signs can be corrected in software. Keep the I2C wires short and away from motor leads. Most GY-521 boards already include I2C pull-ups, so do not add another set unless measurement shows they are needed. Motor noise may require twisted motor leads, local decoupling, and software filtering.
 
