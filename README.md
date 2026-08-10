@@ -119,7 +119,7 @@ Or use **PlatformIO > Project Tasks > esp32-s3-test > General > Monitor** / the 
 
 ```text
 Mode: TEST (no motor hardware required)
-Wi-Fi: ENGG1100-StationKeeper
+Wi-Fi: ENGG1100-Lavender
 Open: http://192.168.4.1/
 Dead-man timeout: 600 ms
 ```
@@ -130,7 +130,7 @@ Exit the command-line monitor with `Control+C` before trying to upload again, be
 
 1. Power the ESP32-S3 and wait for it to start.
 2. On the phone, open Wi-Fi settings.
-3. Join **ENGG1100-StationKeeper**.
+3. Join **ENGG1100-Lavender**.
 4. Enter the password **`station1100`**.
 5. If the phone warns that this Wi-Fi has no internet, choose **Stay Connected**, **Use Without Internet**, or the equivalent option. Temporarily disable automatic switching to mobile data if the phone leaves the network.
 6. Open a browser and enter **`http://192.168.4.1/`** exactly. Use `http`, not `https`.
