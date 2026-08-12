@@ -13,10 +13,11 @@ constexpr uint8_t kOutXMsbRegister = 0x01;
 constexpr uint8_t kXyzDataConfigRegister = 0x0E;
 constexpr uint8_t kCtrlReg1 = 0x2A;
 constexpr uint8_t kCtrlReg2 = 0x2B;
+constexpr uint8_t kCtrlReg1Active100Hz = 0x19;
 constexpr uint8_t kCandidateAddresses[] = {0x1D, 0x1C};
-constexpr uint32_t kReadIntervalMs = 20;
+constexpr uint32_t kReadIntervalMs = 10;
 constexpr uint32_t kReconnectIntervalMs = 1000;
-constexpr float kLowPassAlpha = 0.18f;
+constexpr float kLowPassAlpha = 0.35f;
 constexpr float kRadiansToDegrees = 57.2957795f;
 
 }  // namespace
@@ -48,7 +49,10 @@ void AttitudeSensor::update() {
       }
     }
 #if TEST_MODE
-    updateDemo();
+    if (lastReadMs_ == 0 || now - lastReadMs_ >= kReadIntervalMs) {
+      lastReadMs_ = now;
+      updateDemo();
+    }
 #endif
     return;
   }
@@ -130,7 +134,7 @@ bool AttitudeSensor::connectSensor() {
         !writeRegister(kCtrlReg1, ctrl1 & ~0x01) ||
         !writeRegister(kXyzDataConfigRegister, 0x00) ||
         !writeRegister(kCtrlReg2, 0x02) ||
-        !writeRegister(kCtrlReg1, 0x21)) {
+        !writeRegister(kCtrlReg1, kCtrlReg1Active100Hz)) {
       continue;
     }
 

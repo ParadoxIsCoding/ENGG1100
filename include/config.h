@@ -28,9 +28,11 @@ constexpr uint8_t kRearLeftB = 19;
 constexpr uint8_t kRearRightA = 25;
 constexpr uint8_t kRearRightB = 26;
 
-// One reversible geared winch motor through one H-bridge channel.
-constexpr uint8_t kWinchA = 27;
-constexpr uint8_t kWinchB = 32;
+// Two reversible geared tether winches, each through one H-bridge channel.
+constexpr uint8_t kLeftWinchA = 27;
+constexpr uint8_t kLeftWinchB = 32;
+constexpr uint8_t kRightWinchA = 23;
+constexpr uint8_t kRightWinchB = 33;
 
 // Jaycar XC3732 / Keyestudio KS0270 (MMA8452Q) I2C bus.
 constexpr uint8_t kI2cSda = 21;

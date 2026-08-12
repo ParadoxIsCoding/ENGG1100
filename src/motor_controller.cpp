@@ -14,7 +14,10 @@ constexpr MotorController::MotorPins kRearLeft{Config::kRearLeftA,
                                                Config::kRearLeftB};
 constexpr MotorController::MotorPins kRearRight{Config::kRearRightA,
                                                 Config::kRearRightB};
-constexpr MotorController::MotorPins kWinch{Config::kWinchA, Config::kWinchB};
+constexpr MotorController::MotorPins kLeftWinch{Config::kLeftWinchA,
+                                                Config::kLeftWinchB};
+constexpr MotorController::MotorPins kRightWinch{Config::kRightWinchA,
+                                                 Config::kRightWinchB};
 
 #if !TEST_MODE
 constexpr uint8_t kFrontLeftAChannel = 0;
@@ -25,8 +28,10 @@ constexpr uint8_t kRearLeftAChannel = 4;
 constexpr uint8_t kRearLeftBChannel = 5;
 constexpr uint8_t kRearRightAChannel = 6;
 constexpr uint8_t kRearRightBChannel = 7;
-constexpr uint8_t kWinchAChannel = 8;
-constexpr uint8_t kWinchBChannel = 9;
+constexpr uint8_t kLeftWinchAChannel = 8;
+constexpr uint8_t kLeftWinchBChannel = 9;
+constexpr uint8_t kRightWinchAChannel = 10;
+constexpr uint8_t kRightWinchBChannel = 11;
 
 void prepareStoppedOutput(uint8_t pin) {
   // Set the output latch LOW before enabling the output driver.
@@ -51,8 +56,10 @@ uint8_t channelForPin(uint8_t pin) {
   if (pin == kRearLeft.b) return kRearLeftBChannel;
   if (pin == kRearRight.a) return kRearRightAChannel;
   if (pin == kRearRight.b) return kRearRightBChannel;
-  if (pin == kWinch.a) return kWinchAChannel;
-  return kWinchBChannel;
+  if (pin == kLeftWinch.a) return kLeftWinchAChannel;
+  if (pin == kLeftWinch.b) return kLeftWinchBChannel;
+  if (pin == kRightWinch.a) return kRightWinchAChannel;
+  return kRightWinchBChannel;
 }
 #endif
 
@@ -72,10 +79,18 @@ const char* motionName(Motion motion) {
       return "rotate-left";
     case Motion::RotateRight:
       return "rotate-right";
-    case Motion::WinchPayout:
-      return "winch-payout";
-    case Motion::WinchRetrieve:
-      return "winch-retrieve";
+    case Motion::WinchesPayout:
+      return "winches-payout";
+    case Motion::WinchesRetrieve:
+      return "winches-retrieve";
+    case Motion::LeftWinchPayout:
+      return "left-winch-payout";
+    case Motion::LeftWinchRetrieve:
+      return "left-winch-retrieve";
+    case Motion::RightWinchPayout:
+      return "right-winch-payout";
+    case Motion::RightWinchRetrieve:
+      return "right-winch-retrieve";
     case Motion::Joystick:
       return "joystick";
     case Motion::Stopped:
@@ -97,10 +112,18 @@ bool parseMotion(const String& value, Motion& motion) {
     motion = Motion::RotateLeft;
   } else if (value == "rotate-right") {
     motion = Motion::RotateRight;
-  } else if (value == "winch-payout") {
-    motion = Motion::WinchPayout;
-  } else if (value == "winch-retrieve") {
-    motion = Motion::WinchRetrieve;
+  } else if (value == "winches-payout") {
+    motion = Motion::WinchesPayout;
+  } else if (value == "winches-retrieve") {
+    motion = Motion::WinchesRetrieve;
+  } else if (value == "left-winch-payout") {
+    motion = Motion::LeftWinchPayout;
+  } else if (value == "left-winch-retrieve") {
+    motion = Motion::LeftWinchRetrieve;
+  } else if (value == "right-winch-payout") {
+    motion = Motion::RightWinchPayout;
+  } else if (value == "right-winch-retrieve") {
+    motion = Motion::RightWinchRetrieve;
   } else if (value == "stop") {
     motion = Motion::Stopped;
   } else {
@@ -121,8 +144,10 @@ void MotorController::begin() {
   preparePwmOutput(kRearLeft.b, kRearLeftBChannel);
   preparePwmOutput(kRearRight.a, kRearRightAChannel);
   preparePwmOutput(kRearRight.b, kRearRightBChannel);
-  preparePwmOutput(kWinch.a, kWinchAChannel);
-  preparePwmOutput(kWinch.b, kWinchBChannel);
+  preparePwmOutput(kLeftWinch.a, kLeftWinchAChannel);
+  preparePwmOutput(kLeftWinch.b, kLeftWinchBChannel);
+  preparePwmOutput(kRightWinch.a, kRightWinchAChannel);
+  preparePwmOutput(kRightWinch.b, kRightWinchBChannel);
   Serial.println("[motors] Hardware GPIO enabled; all outputs LOW");
 #endif
   stop();
@@ -153,7 +178,8 @@ void MotorController::apply(Motion motion) {
   drive(kFrontRight, 0);
   drive(kRearLeft, 0);
   drive(kRearRight, 0);
-  drive(kWinch, 0);
+  drive(kLeftWinch, 0);
+  drive(kRightWinch, 0);
   joystickX_ = 0;
   joystickY_ = 0;
 
@@ -194,11 +220,25 @@ void MotorController::apply(Motion motion) {
       drive(kRearLeft, -100);
       drive(kRearRight, 100);
       break;
-    case Motion::WinchPayout:
-      drive(kWinch, Config::kWinchPowerPercent);
+    case Motion::WinchesPayout:
+      drive(kLeftWinch, Config::kWinchPowerPercent);
+      drive(kRightWinch, Config::kWinchPowerPercent);
       break;
-    case Motion::WinchRetrieve:
-      drive(kWinch, -Config::kWinchPowerPercent);
+    case Motion::WinchesRetrieve:
+      drive(kLeftWinch, -Config::kWinchPowerPercent);
+      drive(kRightWinch, -Config::kWinchPowerPercent);
+      break;
+    case Motion::LeftWinchPayout:
+      drive(kLeftWinch, Config::kWinchPowerPercent);
+      break;
+    case Motion::LeftWinchRetrieve:
+      drive(kLeftWinch, -Config::kWinchPowerPercent);
+      break;
+    case Motion::RightWinchPayout:
+      drive(kRightWinch, Config::kWinchPowerPercent);
+      break;
+    case Motion::RightWinchRetrieve:
+      drive(kRightWinch, -Config::kWinchPowerPercent);
       break;
     case Motion::Stopped:
     case Motion::Joystick:
@@ -252,7 +292,8 @@ void MotorController::applyJoystick(int8_t xPercent, int8_t yPercent) {
   drive(kFrontRight, 0);
   drive(kRearLeft, 0);
   drive(kRearRight, 0);
-  drive(kWinch, 0);
+  drive(kLeftWinch, 0);
+  drive(kRightWinch, 0);
   drive(kFrontLeft, left);
   drive(kRearLeft, left);
   drive(kFrontRight, right);

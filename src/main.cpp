@@ -275,6 +275,7 @@ void setup() {
 }
 
 void loop() {
+  attitude.update();
   server.handleClient();
   delay(2);
 }
