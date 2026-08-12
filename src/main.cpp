@@ -61,7 +61,7 @@ int8_t currentJoystickAxis(bool xAxis) {
 String statusJson() {
   attitude.update();
   String json;
-  json.reserve(210);
+  json.reserve(260);
   json = F("{\"motion\":\"");
   json += motionName(currentMotion());
   json += F("\",\"estop\":");
@@ -82,6 +82,8 @@ String statusJson() {
   json += String(attitude.rollDegrees(), 1);
   json += F(",\"attitudeDemo\":");
   json += attitude.demoMode() ? F("true") : F("false");
+  json += F(",\"attitudeConnected\":");
+  json += attitude.connected() ? F("true") : F("false");
   json += F("}");
   return json;
 }
@@ -205,7 +207,10 @@ void handleClearEmergencyStop() {
 }
 
 void handleSetLevel() {
-  attitude.setLevel();
+  if (!attitude.setLevel()) {
+    sendJson(503, F("{\"error\":\"MMA8452Q is not connected\"}"));
+    return;
+  }
   Serial.println("[attitude] current position set as level");
   sendJson(200, statusJson());
 }

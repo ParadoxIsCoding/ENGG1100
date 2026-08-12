@@ -15,20 +15,25 @@ constexpr uint32_t kDeadmanTimeoutMs = 600;
 constexpr uint8_t kJoystickDeadZonePercent = 12;
 constexpr uint16_t kMotorPwmFrequencyHz = 20000;
 constexpr uint8_t kMotorPwmResolutionBits = 8;
+constexpr uint8_t kWinchPowerPercent = 65;
 
-// Change these only after checking the pinout for the exact ESP32-S3 board.
+// ESP32-WROOM-32U GPIO map. Do not use GPIO 6-11: they are connected to flash.
 // Each L9110S motor channel uses two logic inputs.
-constexpr uint8_t kFrontLeftA = 4;
-constexpr uint8_t kFrontLeftB = 5;
-constexpr uint8_t kFrontRightA = 6;
-constexpr uint8_t kFrontRightB = 7;
-constexpr uint8_t kRearLeftA = 15;
-constexpr uint8_t kRearLeftB = 16;
-constexpr uint8_t kRearRightA = 17;
-constexpr uint8_t kRearRightB = 18;
+constexpr uint8_t kFrontLeftA = 13;
+constexpr uint8_t kFrontLeftB = 14;
+constexpr uint8_t kFrontRightA = 16;
+constexpr uint8_t kFrontRightB = 17;
+constexpr uint8_t kRearLeftA = 18;
+constexpr uint8_t kRearLeftB = 19;
+constexpr uint8_t kRearRightA = 25;
+constexpr uint8_t kRearRightB = 26;
 
-// Reserved for the future MPU6050.
-constexpr uint8_t kI2cSda = 8;
-constexpr uint8_t kI2cScl = 9;
+// One reversible geared winch motor through one H-bridge channel.
+constexpr uint8_t kWinchA = 27;
+constexpr uint8_t kWinchB = 32;
+
+// Jaycar XC3732 / Keyestudio KS0270 (MMA8452Q) I2C bus.
+constexpr uint8_t kI2cSda = 21;
+constexpr uint8_t kI2cScl = 22;
 
 }  // namespace Config

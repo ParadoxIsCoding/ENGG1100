@@ -61,6 +61,10 @@ const char kControlPage[] PROGMEM = R"HTML(
     .axis-right { right: .7rem; top: 50%; transform: translateY(-50%); }
     .stick { position: absolute; left: 50%; top: 50%; width: 4.6rem; aspect-ratio: 1; border: 2px solid #8ac9ff; border-radius: 50%; background: linear-gradient(145deg,#3687c7,#17558a); box-shadow: 0 .35rem .8rem #02070daa,inset 0 1px 1px #b9e2ff99; transform: translate(-50%,-50%); pointer-events: none; }
     .secondary { display: grid; width: 100%; grid-template-columns: 1fr 1.1fr 1fr; gap: .65rem; }
+    .tether-heading { margin: 0 0 .35rem; font-size: 1rem; }
+    .tether-controls { display: grid; grid-template-columns: 1fr 1fr; gap: .65rem; }
+    .payout { background: #174f72; }
+    .retrieve { background: #3c315f; }
     .stop { background: #7c2731; border-color: #ca5866; }
     .estop { width: 100%; min-height: 4.8rem; margin-top: 1rem; background: #c92e3e; border-color: #ff7a86; font-size: 1.15rem; }
     .reset { width: 100%; min-height: 3rem; margin-top: .65rem; background: transparent; }
@@ -107,9 +111,17 @@ const char kControlPage[] PROGMEM = R"HTML(
       <button data-motion="rotate-right">Rotate ↻</button>
     </div>
   </section>
+  <section class="panel" aria-labelledby="tether-heading">
+    <h2 class="tether-heading" id="tether-heading">Tether Winch</h2>
+    <div class="tether-controls">
+      <button class="payout" data-motion="winch-payout">Hold: PAY OUT<br><small>water rising</small></button>
+      <button class="retrieve" data-motion="winch-retrieve">Hold: TAKE IN<br><small>water falling</small></button>
+    </div>
+    <p class="hint">Manual hold-to-run control. Release at once if the rope is slack, jammed, or over-tensioned.</p>
+  </section>
   <button class="estop" id="estop">EMERGENCY STOP</button>
   <button class="reset" id="reset" hidden>Clear emergency stop</button>
-  <p class="hint" id="control-hint">Hold and drag the joystick to move proportionally. Its centre is a dead zone. Releasing it stops all motors. A lost connection also stops motion automatically.</p>
+  <p class="hint" id="control-hint">All movement and winch controls are hold-to-run. Releasing, losing connection, STOP, or emergency stop stops every motor.</p>
 </main>
 <script>
 (() => {
@@ -156,13 +168,23 @@ const char kControlPage[] PROGMEM = R"HTML(
     connection.className = 'pill online';
     mode.textContent = data.testMode ? 'TEST MODE — motors simulated' : 'HARDWARE MODE';
     state.textContent = data.estop ? 'EMERGENCY STOP LATCHED' :
-      data.motion === 'joystick' ? `JOYSTICK  X ${data.x} · Y ${data.y}` : data.motion.toUpperCase();
+      data.motion === 'joystick' ? `JOYSTICK  X ${data.x} · Y ${data.y}` :
+      data.motion === 'winch-payout' ? 'TETHER: PAYING OUT' :
+      data.motion === 'winch-retrieve' ? 'TETHER: TAKING IN' : data.motion.toUpperCase();
     reset.hidden = !data.estop;
     renderAttitude(data);
   }
 
   function renderAttitude(data) {
     if (!Number.isFinite(data.pitch) || !Number.isFinite(data.roll)) return;
+    const levelButton = document.querySelector('#set-level');
+    levelButton.disabled = !data.attitudeConnected && !data.attitudeDemo;
+    if (!data.attitudeConnected && !data.attitudeDemo) {
+      attitudeSource.textContent = 'IMU NOT FOUND';
+      tiltStatus.textContent = 'IMU OFFLINE';
+      tiltStatus.className = 'tilt-red';
+      return;
+    }
     const pitch = data.pitch;
     const roll = data.roll;
     horizonWorld.style.transform = `translate(-50%,calc(-50% + ${pitch * 2}px)) rotate(${-roll}deg)`;
@@ -172,7 +194,7 @@ const char kControlPage[] PROGMEM = R"HTML(
     const level = tilt < 5 ? ['LEVEL','tilt-green'] : tilt <= 10 ? ['CAUTION','tilt-amber'] : ['HIGH TILT','tilt-red'];
     tiltStatus.textContent = level[0];
     tiltStatus.className = level[1];
-    attitudeSource.textContent = data.attitudeDemo ? 'SMOOTH DEMO' : 'LIVE IMU';
+    attitudeSource.textContent = data.attitudeDemo ? 'SMOOTH DEMO' : 'LIVE MMA8452Q';
     document.querySelector('.horizon').setAttribute('aria-label', `Pitch ${pitch.toFixed(1)} degrees, roll ${roll.toFixed(1)} degrees`);
   }
 
