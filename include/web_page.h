@@ -11,21 +11,20 @@ const char kControlPage[] PROGMEM = R"HTML(
   <style>
     :root { color-scheme: dark; font-family: system-ui,-apple-system,sans-serif; }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html,body { overscroll-behavior: none; }
     body { margin: 0; min-height: 100dvh; background: #07111f; color: #f7fbff; touch-action: manipulation; }
-    main { width: min(100%, 30rem); margin: auto; padding: max(1rem,env(safe-area-inset-top)) 1rem max(1rem,env(safe-area-inset-bottom)); }
-    header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-    h1 { margin: 0; font-size: clamp(1.4rem,7vw,2rem); }
+    main { width: min(100%, 30rem); margin: auto; padding: max(.6rem,env(safe-area-inset-top)) .75rem calc(6.7rem + env(safe-area-inset-bottom)); }
+    header { display: flex; align-items: center; justify-content: space-between; gap: .55rem; min-height: 2rem; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+    .status-line { min-width: 0; display: flex; align-items: center; gap: .5rem; }
     .pill { border: 1px solid #3d536c; border-radius: 999px; padding: .35rem .65rem; font-size: .8rem; }
     .online { color: #70f0b0; border-color: #287f59; }
     .offline { color: #ffadad; border-color: #963e45; }
-    .panel { margin-top: 1rem; padding: 1rem; background: #101d2d; border: 1px solid #263b52; border-radius: 1rem; }
-    #mode { color: #9dc7f1; font-size: .9rem; }
-    #state { margin: .35rem 0 0; font-size: 1.15rem; font-weight: 700; }
-    .attitude-panel { display: grid; justify-items: center; gap: .7rem; }
-    .attitude-heading { width: 100%; display: flex; align-items: baseline; justify-content: space-between; gap: .75rem; }
-    .attitude-heading h2 { margin: 0; font-size: 1rem; }
-    #attitude-source { color: #8da8c0; font-size: .72rem; letter-spacing: .04em; }
-    .horizon { position: relative; width: min(58vw,12.5rem); aspect-ratio: 1; overflow: hidden; border: 3px solid #60758c; border-radius: 50%; background: #132131; box-shadow: inset 0 0 1.2rem #000b,0 .45rem 1rem #03091288; }
+    .panel { margin-top: .65rem; padding: .7rem; background: #101d2d; border: 1px solid #263b52; border-radius: .9rem; }
+    #mode { flex: none; color: #9dc7f1; font-size: .67rem; font-weight: 750; letter-spacing: .04em; }
+    #state { min-width: 0; margin: 0; overflow: hidden; font-size: .82rem; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+    .attitude-panel { display: grid; grid-template-columns: 7rem 1fr; align-items: center; gap: .7rem; }
+    .horizon { position: relative; width: 7rem; aspect-ratio: 1; overflow: hidden; border: 3px solid #60758c; border-radius: 50%; background: #132131; box-shadow: inset 0 0 1.2rem #000b,0 .35rem .8rem #03091288; }
     .horizon-world { position: absolute; left: 50%; top: 50%; width: 320%; height: 320%; background: linear-gradient(to bottom,#2378b7 0 49.7%,#f3f4f4 49.7% 50.3%,#8b542e 50.3% 100%); transform: translate(-50%,-50%); transition: transform 45ms linear; will-change: transform; }
     .pitch-line { position: absolute; left: 50%; width: 2rem; height: 1px; background: #fff; box-shadow: 0 1px #0008; transform: translateX(-50%); }
     .pitch-line.long { width: 3.2rem; }
@@ -38,18 +37,22 @@ const char kControlPage[] PROGMEM = R"HTML(
     .aircraft::before { left: 0; transform: rotate(8deg); transform-origin: right; }
     .aircraft::after { right: 0; transform: rotate(-8deg); transform-origin: left; }
     .aircraft-centre { position: absolute; left: 50%; top: 50%; width: .65rem; aspect-ratio: 1; border: .18rem solid #171717; border-radius: 50%; background: #ffd43b; transform: translate(-50%,-50%); }
-    .attitude-readings { display: grid; width: 100%; grid-template-columns: 1fr 1fr auto; align-items: center; gap: .55rem; }
+    .attitude-readings { display: grid; width: 100%; grid-template-columns: 1fr 1fr; align-items: center; gap: .45rem; }
     .attitude-value { padding: .5rem .35rem; border: 1px solid #31475f; border-radius: .65rem; background: #0c1928; text-align: center; }
     .attitude-value span { display: block; color: #9db0c4; font-size: .68rem; font-weight: 700; letter-spacing: .08em; }
     .attitude-value strong { display: block; margin-top: .08rem; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
-    #tilt-status { grid-column: 1 / -1; justify-self: center; padding: .28rem .7rem; border: 1px solid currentColor; border-radius: 999px; font-size: .72rem; font-weight: 800; letter-spacing: .06em; }
+    #tilt-status { justify-self: stretch; padding: .35rem .4rem; border: 1px solid currentColor; border-radius: .6rem; font-size: .69rem; font-weight: 800; letter-spacing: .05em; text-align: center; }
     .tilt-green { color: #70f0b0; } .tilt-amber { color: #ffc85c; } .tilt-red { color: #ff7a86; }
-    .level { min-height: 3rem; padding: 0 .8rem; white-space: nowrap; }
-    .controls { display: flex; flex-direction: column; align-items: center; gap: 1rem; margin-top: 1rem; }
-    button { min-height: 4.25rem; border: 1px solid #49627f; border-radius: .85rem; background: #172b42; color: inherit; font: inherit; font-weight: 750; touch-action: none; user-select: none; }
+    .level { min-height: 2.3rem; padding: 0 .4rem; white-space: nowrap; }
+    .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: .45rem; margin-top: .65rem; padding: .25rem; border: 1px solid #263b52; border-radius: .85rem; background: #0c1928; }
+    .tab { min-height: 2.7rem; border: 0; border-radius: .65rem; background: transparent; color: #9db0c4; }
+    .tab.selected { background: #2073b8; color: #fff; }
+    .control-view { margin-top: .65rem; }
+    .controls { display: flex; flex-direction: column; align-items: center; gap: .6rem; }
+    button { min-height: 3.65rem; border: 1px solid #49627f; border-radius: .8rem; background: #172b42; color: inherit; font: inherit; font-weight: 750; touch-action: none; user-select: none; }
     button:active,.active { background: #2073b8; transform: scale(.98); }
     button:focus-visible { outline: 3px solid #75bfff; outline-offset: 2px; }
-    .joystick { position: relative; width: min(72vw,17rem); aspect-ratio: 1; border: 2px solid #49627f; border-radius: 50%; background: radial-gradient(circle at center,#213850 0 11%,#14273b 12% 54%,#0c1928 55%); box-shadow: inset 0 0 0 1px #0a1522,0 .6rem 1.5rem #03091266; touch-action: none; user-select: none; cursor: grab; }
+    .joystick { position: relative; width: min(58vw,14.5rem); aspect-ratio: 1; border: 2px solid #49627f; border-radius: 50%; background: radial-gradient(circle at center,#213850 0 11%,#14273b 12% 54%,#0c1928 55%); box-shadow: inset 0 0 0 1px #0a1522,0 .5rem 1.2rem #03091266; touch-action: none; user-select: none; cursor: grab; }
     .joystick.active { background: radial-gradient(circle at center,#284b69 0 11%,#17324b 12% 54%,#0c1928 55%); transform: none; cursor: grabbing; }
     .joystick:focus-visible { outline: 3px solid #75bfff; outline-offset: 4px; }
     .joystick::before,.joystick::after { content: ''; position: absolute; inset: 50% 10%; height: 1px; background: #63809c55; pointer-events: none; }
@@ -60,31 +63,30 @@ const char kControlPage[] PROGMEM = R"HTML(
     .axis-left { left: .7rem; top: 50%; transform: translateY(-50%); }
     .axis-right { right: .7rem; top: 50%; transform: translateY(-50%); }
     .stick { position: absolute; left: 50%; top: 50%; width: 4.6rem; aspect-ratio: 1; border: 2px solid #8ac9ff; border-radius: 50%; background: linear-gradient(145deg,#3687c7,#17558a); box-shadow: 0 .35rem .8rem #02070daa,inset 0 1px 1px #b9e2ff99; transform: translate(-50%,-50%); pointer-events: none; }
-    .secondary { display: grid; width: 100%; grid-template-columns: 1fr 1.1fr 1fr; gap: .65rem; }
-    .tether-heading { margin: 0 0 .35rem; font-size: 1rem; }
-    .tether-controls { display: grid; grid-template-columns: 1fr 1fr; gap: .65rem; }
-    .trim-heading { margin: .9rem 0 .45rem; color: #9db0c4; font-size: .72rem; letter-spacing: .08em; }
-    .trim-controls { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
-    .trim-controls button { min-height: 3.3rem; font-size: .82rem; }
+    .secondary { display: grid; width: 100%; grid-template-columns: 1fr 1fr; gap: .55rem; }
+    .tether-controls { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+    .tether-controls button { min-height: 5.4rem; font-size: 1rem; }
+    .trim-controls { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin-top: .6rem; }
+    .trim-controls button { min-height: 4rem; font-size: .88rem; }
     .payout { background: #174f72; }
     .retrieve { background: #3c315f; }
-    .stop { background: #7c2731; border-color: #ca5866; }
-    .estop { width: 100%; min-height: 4.8rem; margin-top: 1rem; background: #c92e3e; border-color: #ff7a86; font-size: 1.15rem; }
-    .reset { width: 100%; min-height: 3rem; margin-top: .65rem; background: transparent; }
-    .hint { margin: .85rem 0 0; color: #afbed0; font-size: .85rem; line-height: 1.4; }
+    .safety-dock { position: fixed; z-index: 20; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: .8fr 1.2fr; gap: .55rem; width: min(100%,30rem); margin: auto; padding: .6rem .75rem max(.6rem,env(safe-area-inset-bottom)); border-top: 1px solid #31475f; background: #07111ff2; box-shadow: 0 -.4rem 1rem #0007; backdrop-filter: blur(12px); }
+    .stop { background: #7c2731; border-color: #ca5866; font-size: 1rem; }
+    .estop { background: #c92e3e; border-color: #ff7a86; font-size: 1rem; }
+    .reset { grid-column: 1 / -1; min-height: 2.8rem; background: #172b42; }
     [hidden] { display: none; }
-    @media (max-height: 700px) { button { min-height: 3.35rem; } .panel { padding: .75rem; } .joystick { width: min(58vw,13rem); } }
+    @media (max-height: 700px) { .attitude-panel { grid-template-columns: 5.7rem 1fr; } .horizon { width: 5.7rem; } .joystick { width: min(48vw,11.5rem); } .tether-controls button { min-height: 4.2rem; } .trim-controls button { min-height: 3.4rem; } }
+    @media (orientation: landscape) and (max-height: 520px) { main { width: min(100%,50rem); padding-bottom: calc(5.3rem + env(safe-area-inset-bottom)); } header { position: absolute; top: max(.45rem,env(safe-area-inset-top)); left: .75rem; right: .75rem; } .panel { width: 42%; margin-top: 2.5rem; } .tabs { width: 42%; } .control-view { position: absolute; top: max(.45rem,env(safe-area-inset-top)); right: .75rem; width: 53%; } .joystick { width: min(45vh,11rem); } .safety-dock { width: min(100%,50rem); } }
   </style>
 </head>
 <body>
 <main>
-  <header><h1>Station Keeper</h1><span id="connection" class="pill offline">Connecting</span></header>
-  <section class="panel" aria-live="polite">
-    <div id="mode">Loading controller status…</div>
-    <p id="state">STOPPED</p>
-  </section>
+  <h1 class="sr-only">Station Keeper controls</h1>
+  <header aria-live="polite">
+    <div class="status-line"><span id="connection" class="pill offline">Connecting</span><p id="state">STOPPED</p></div>
+    <div id="mode">LOADING</div>
+  </header>
   <section class="panel attitude-panel" aria-label="Live pitch and roll">
-    <div class="attitude-heading"><h2>Artificial Horizon</h2><span id="attitude-source">ATTITUDE</span></div>
     <div class="horizon" role="img" aria-label="Artificial horizon">
       <div id="horizon-world" class="horizon-world">
         <i class="pitch-line long p-up-10"></i><i class="pitch-line p-up-5"></i>
@@ -96,12 +98,18 @@ const char kControlPage[] PROGMEM = R"HTML(
     <div class="attitude-readings">
       <div class="attitude-value"><span>PITCH</span><strong id="pitch">0.0°</strong></div>
       <div class="attitude-value"><span>ROLL</span><strong id="roll">0.0°</strong></div>
-      <button class="level" id="set-level">Set Level</button>
+      <button class="level" id="set-level">SET LEVEL</button>
       <span id="tilt-status" class="tilt-green">LEVEL</span>
     </div>
   </section>
-  <section class="controls" aria-label="Hold-to-run motion controls">
-    <div id="joystick" class="joystick" role="application" tabindex="0" aria-label="Movement joystick. Hold and drag in any direction." aria-describedby="control-hint">
+
+  <nav class="tabs" aria-label="Control selection">
+    <button class="tab selected" type="button" data-tab="drive" aria-controls="drive-controls" aria-selected="true">DRIVE</button>
+    <button class="tab" type="button" data-tab="winches" aria-controls="winch-controls" aria-selected="false">WINCHES</button>
+  </nav>
+
+  <section class="control-view controls" id="drive-controls" aria-label="Hold-to-run drive controls">
+    <div id="joystick" class="joystick" role="application" tabindex="0" aria-label="Movement joystick. Hold and drag in any direction.">
       <span class="axis axis-up">FORWARD</span>
       <span class="axis axis-down">REVERSE</span>
       <span class="axis axis-left">LEFT</span>
@@ -109,30 +117,29 @@ const char kControlPage[] PROGMEM = R"HTML(
       <span id="stick" class="stick"></span>
     </div>
     <div class="secondary">
-      <button data-motion="rotate-left">↺ Rotate</button>
-      <button class="stop" id="stop">STOP</button>
-      <button data-motion="rotate-right">Rotate ↻</button>
+      <button data-motion="rotate-left" aria-label="Hold to rotate left">↺ ROTATE</button>
+      <button data-motion="rotate-right" aria-label="Hold to rotate right">ROTATE ↻</button>
     </div>
   </section>
-  <section class="panel" aria-labelledby="tether-heading">
-    <h2 class="tether-heading" id="tether-heading">Tether Winches</h2>
+
+  <section class="control-view" id="winch-controls" aria-label="Hold-to-run tether winch controls" hidden>
     <div class="tether-controls">
-      <button class="payout" data-motion="winches-payout">Hold: BOTH OUT<br><small>water rising</small></button>
-      <button class="retrieve" data-motion="winches-retrieve">Hold: BOTH IN<br><small>water falling</small></button>
+      <button class="payout" data-motion="winches-payout" aria-label="Hold to pay both ropes out">↑<br>BOTH OUT</button>
+      <button class="retrieve" data-motion="winches-retrieve" aria-label="Hold to take both ropes in">↓<br>BOTH IN</button>
     </div>
-    <h3 class="trim-heading">INDIVIDUAL ROPE TRIM</h3>
     <div class="trim-controls">
-      <button data-motion="left-winch-payout">Left out</button>
-      <button data-motion="right-winch-payout">Right out</button>
-      <button data-motion="left-winch-retrieve">Left in</button>
-      <button data-motion="right-winch-retrieve">Right in</button>
+      <button data-motion="left-winch-payout" aria-label="Hold to pay left rope out">L ↑ OUT</button>
+      <button data-motion="right-winch-payout" aria-label="Hold to pay right rope out">R ↑ OUT</button>
+      <button data-motion="left-winch-retrieve" aria-label="Hold to take left rope in">L ↓ IN</button>
+      <button data-motion="right-winch-retrieve" aria-label="Hold to take right rope in">R ↓ IN</button>
     </div>
-    <p class="hint">Manual hold-to-run control for two ropes. Use both controls for water-height changes and trim only to equalise slack. Release immediately if either rope jams or becomes tight.</p>
   </section>
-  <button class="estop" id="estop">EMERGENCY STOP</button>
-  <button class="reset" id="reset" hidden>Clear emergency stop</button>
-  <p class="hint" id="control-hint">All movement and winch controls are hold-to-run. Releasing, losing connection, STOP, or emergency stop stops every motor.</p>
 </main>
+<div class="safety-dock" aria-label="Safety controls">
+  <button class="stop" id="stop">STOP</button>
+  <button class="estop" id="estop">EMERGENCY STOP</button>
+  <button class="reset" id="reset" hidden>CLEAR E-STOP</button>
+</div>
 <script>
 (() => {
   const connection = document.querySelector('#connection');
@@ -145,7 +152,6 @@ const char kControlPage[] PROGMEM = R"HTML(
   const pitchValue = document.querySelector('#pitch');
   const rollValue = document.querySelector('#roll');
   const tiltStatus = document.querySelector('#tilt-status');
-  const attitudeSource = document.querySelector('#attitude-source');
   const deadZone = .12;
   let heldMotion = null;
   let joystickPointer = null;
@@ -175,9 +181,9 @@ const char kControlPage[] PROGMEM = R"HTML(
   }
 
   function render(data) {
-    connection.textContent = 'Connected';
+    connection.textContent = 'ONLINE';
     connection.className = 'pill online';
-    mode.textContent = data.testMode ? 'TEST MODE — motors simulated' : 'HARDWARE MODE';
+    mode.textContent = data.testMode ? 'TEST MODE' : 'HARDWARE';
     state.textContent = data.estop ? 'EMERGENCY STOP LATCHED' :
       data.motion === 'joystick' ? `JOYSTICK  X ${data.x} · Y ${data.y}` :
       data.motion === 'winches-payout' ? 'TETHERS: BOTH PAYING OUT' :
@@ -192,7 +198,6 @@ const char kControlPage[] PROGMEM = R"HTML(
     const levelButton = document.querySelector('#set-level');
     levelButton.disabled = !data.attitudeConnected && !data.attitudeDemo;
     if (!data.attitudeConnected && !data.attitudeDemo) {
-      attitudeSource.textContent = 'IMU NOT FOUND';
       tiltStatus.textContent = 'IMU OFFLINE';
       tiltStatus.className = 'tilt-red';
       return;
@@ -207,7 +212,6 @@ const char kControlPage[] PROGMEM = R"HTML(
     const level = tilt < 5 ? ['LEVEL','tilt-green'] : tilt <= 10 ? ['CAUTION','tilt-amber'] : ['HIGH TILT','tilt-red'];
     tiltStatus.textContent = level[0];
     tiltStatus.className = level[1];
-    attitudeSource.textContent = data.attitudeDemo ? 'SMOOTH DEMO' : 'LIVE MMA8452Q';
     document.querySelector('.horizon').setAttribute('aria-label', `Pitch ${pitch.toFixed(1)} degrees, roll ${roll.toFixed(1)} degrees`);
   }
 
@@ -303,6 +307,20 @@ const char kControlPage[] PROGMEM = R"HTML(
     button.addEventListener('pointerup', endMotion);
     button.addEventListener('pointercancel', endMotion);
     button.addEventListener('lostpointercapture', endMotion);
+  });
+
+  document.querySelectorAll('[data-tab]').forEach(tab => {
+    tab.addEventListener('click', () => {
+      endMotion();
+      const selected = tab.dataset.tab;
+      document.querySelector('#drive-controls').hidden = selected !== 'drive';
+      document.querySelector('#winch-controls').hidden = selected !== 'winches';
+      document.querySelectorAll('[data-tab]').forEach(item => {
+        const active = item === tab;
+        item.classList.toggle('selected', active);
+        item.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+    });
   });
 
   joystick.addEventListener('pointerdown', event => {
