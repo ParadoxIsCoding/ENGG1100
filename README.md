@@ -27,7 +27,7 @@ Use the GPIO numbers printed below, not a board vendor's `D` numbers. The three 
 | L9110S board 3, right-winch channel | `B-IA`, `B-IB` | GPIO `23`, GPIO `33` |
 | XC3732 / KS0270 | `SDA`, `SCL` | GPIO `21`, GPIO `22` |
 | XC3732 / KS0270 | `VCC`, `GND` | `3V3`, `GND` |
-| XC3732 / KS0270 | `INT1`, `INT2` | Not connected |
+| XC3732 / KS0270 | `INT1`, `INT2` | Not connected; optional interrupts are not used |
 
 ```text
 ESP32-WROOM-32U                   SIGNAL CONNECTIONS

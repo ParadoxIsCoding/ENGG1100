@@ -21,10 +21,15 @@ constexpr float kLowPassAlpha = 0.35f;
 constexpr float kGravityTrackingAlpha = 0.01f;
 constexpr float kVerticalAccelerationAlpha = 0.40f;
 constexpr float kMotionTriggerG = 0.008f;
-constexpr float kQuietAccelerationG = 0.004f;
+constexpr float kGravityUpdateLimitG = 0.020f;
 constexpr uint32_t kMotionDisplayMs = 1200;
-constexpr uint32_t kRearmQuietMs = 250;
+constexpr uint32_t kInitialArmDelayMs = 500;
+constexpr uint32_t kMotionRearmDelayMs = 350;
 constexpr float kRadiansToDegrees = 57.2957795f;
+
+bool deadlineReached(uint32_t now, uint32_t deadline) {
+  return static_cast<int32_t>(now - deadline) >= 0;
+}
 
 }  // namespace
 
@@ -92,7 +97,7 @@ void AttitudeSensor::update() {
     filteredVerticalAccelerationG_ = 0.0f;
     verticalMotion_ = VerticalMotion::Steady;
     motionDisplayUntilMs_ = 0;
-    quietSinceMs_ = now;
+    motionRearmAtMs_ = now + kInitialArmDelayMs;
     motionDetectorArmed_ = false;
     filterInitialised_ = true;
   } else {
@@ -120,7 +125,7 @@ bool AttitudeSensor::setLevel() {
   filteredVerticalAccelerationG_ = 0.0f;
   verticalMotion_ = VerticalMotion::Steady;
   motionDisplayUntilMs_ = 0;
-  quietSinceMs_ = millis();
+  motionRearmAtMs_ = millis() + kInitialArmDelayMs;
   motionDetectorArmed_ = false;
   return true;
 }
@@ -240,7 +245,7 @@ void AttitudeSensor::updateVerticalMotion(float xG, float yG, float zG,
     gravityXG_ = xG;
     gravityYG_ = yG;
     gravityZG_ = zG;
-    quietSinceMs_ = now;
+    motionRearmAtMs_ = now + kInitialArmDelayMs;
     motionDetectorArmed_ = false;
     return;
   }
@@ -258,25 +263,21 @@ void AttitudeSensor::updateVerticalMotion(float xG, float yG, float zG,
   // Slowly learn the stationary gravity vector so sensor bias cannot create a
   // permanent rise/fall indication. Motion is detected from the first impulse
   // and latched; the opposite impulse when the platform stops is ignored.
-  const float absoluteVerticalAcceleration =
-      fabsf(filteredVerticalAccelerationG_);
-  if (absoluteVerticalAcceleration < kQuietAccelerationG) {
+  if (fabsf(filteredVerticalAccelerationG_) < kGravityUpdateLimitG) {
     gravityXG_ += kGravityTrackingAlpha * (xG - gravityXG_);
     gravityYG_ += kGravityTrackingAlpha * (yG - gravityYG_);
     gravityZG_ += kGravityTrackingAlpha * (zG - gravityZG_);
-    if (quietSinceMs_ == 0) quietSinceMs_ = now;
-  } else {
-    quietSinceMs_ = 0;
   }
 
   if (!motionDetectorArmed_) {
     if (motionDisplayUntilMs_ != 0 &&
-        static_cast<int32_t>(now - motionDisplayUntilMs_) >= 0) {
+        deadlineReached(now, motionDisplayUntilMs_)) {
       motionDisplayUntilMs_ = 0;
       verticalMotion_ = VerticalMotion::Steady;
+      motionRearmAtMs_ = now + kMotionRearmDelayMs;
     }
-    if (motionDisplayUntilMs_ == 0 && quietSinceMs_ != 0 &&
-        now - quietSinceMs_ >= kRearmQuietMs) {
+    if (motionDisplayUntilMs_ == 0 &&
+        deadlineReached(now, motionRearmAtMs_)) {
       motionDetectorArmed_ = true;
     }
     return;
@@ -293,7 +294,6 @@ void AttitudeSensor::updateVerticalMotion(float xG, float yG, float zG,
 
   motionDetectorArmed_ = false;
   motionDisplayUntilMs_ = now + kMotionDisplayMs;
-  quietSinceMs_ = 0;
   Serial.printf("[attitude] vertical motion: %s (%.3f g)\n",
                 verticalMotionName(), filteredVerticalAccelerationG_);
 }
