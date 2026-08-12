@@ -40,7 +40,8 @@ class AttitudeSensor {
   float gravityYG_ = 0.0f;
   float gravityZG_ = 1.0f;
   float filteredVerticalAccelerationG_ = 0.0f;
-  float verticalVelocityMps_ = 0.0f;
-  uint32_t lastMotionSampleMs_ = 0;
+  uint32_t motionDisplayUntilMs_ = 0;
+  uint32_t quietSinceMs_ = 0;
+  bool motionDetectorArmed_ = false;
   VerticalMotion verticalMotion_ = VerticalMotion::Steady;
 };

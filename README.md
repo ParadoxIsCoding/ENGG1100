@@ -2,7 +2,7 @@
 
 Station Keeper is an offline iPhone controller for Team Lavender's floating evacuation-centre prototype. An ESP32-WROOM-32U creates its own Wi-Fi network, drives four station-keeping motors and two tether winches, and reads a Jaycar XC3732 / Keyestudio KS0270 (MMA8452Q) tilt sensor. The phone interface provides proportional drive, manual rope payout/retrieval, pitch and roll, a display-only vertical-motion estimate, and latched emergency stop.
 
-The XC3732 can indicate short **RISING**, **FALLING**, and **STEADY** movements. It does not measure water height or rope tension, and its estimate never controls a motor. A very slow constant water-level change may appear steady because an accelerometer cannot determine absolute height.
+The XC3732 can indicate short **RISING**, **FALLING**, and **STEADY** movements. The first upward or downward movement is detected sensitively and held on screen for about 1.2 seconds so it is visible on the phone. It does not measure water height or rope tension, and its estimate never controls a motor. A very slow constant water-level change may appear steady because an accelerometer cannot determine absolute height.
 
 ## Wi-Fi and controller address
 

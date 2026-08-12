@@ -19,11 +19,11 @@ constexpr uint32_t kReadIntervalMs = 10;
 constexpr uint32_t kReconnectIntervalMs = 1000;
 constexpr float kLowPassAlpha = 0.35f;
 constexpr float kGravityTrackingAlpha = 0.01f;
-constexpr float kVerticalAccelerationAlpha = 0.25f;
-constexpr float kVelocityLeak = 0.999f;
-constexpr float kGravityMps2 = 9.80665f;
-constexpr float kMotionStartMps = 0.025f;
-constexpr float kMotionStopMps = 0.012f;
+constexpr float kVerticalAccelerationAlpha = 0.40f;
+constexpr float kMotionTriggerG = 0.008f;
+constexpr float kQuietAccelerationG = 0.004f;
+constexpr uint32_t kMotionDisplayMs = 1200;
+constexpr uint32_t kRearmQuietMs = 250;
 constexpr float kRadiansToDegrees = 57.2957795f;
 
 }  // namespace
@@ -90,9 +90,10 @@ void AttitudeSensor::update() {
     gravityYG_ = yG;
     gravityZG_ = zG;
     filteredVerticalAccelerationG_ = 0.0f;
-    verticalVelocityMps_ = 0.0f;
     verticalMotion_ = VerticalMotion::Steady;
-    lastMotionSampleMs_ = now;
+    motionDisplayUntilMs_ = 0;
+    quietSinceMs_ = now;
+    motionDetectorArmed_ = false;
     filterInitialised_ = true;
   } else {
     updateVerticalMotion(xG, yG, zG, now);
@@ -113,6 +114,14 @@ bool AttitudeSensor::setLevel() {
   if (!connected_ && !demoMode()) return false;
   pitchOffsetDegrees_ = rawPitchDegrees_;
   rollOffsetDegrees_ = rawRollDegrees_;
+  gravityXG_ = filteredXG_;
+  gravityYG_ = filteredYG_;
+  gravityZG_ = filteredZG_;
+  filteredVerticalAccelerationG_ = 0.0f;
+  verticalMotion_ = VerticalMotion::Steady;
+  motionDisplayUntilMs_ = 0;
+  quietSinceMs_ = millis();
+  motionDetectorArmed_ = false;
   return true;
 }
 
@@ -231,7 +240,8 @@ void AttitudeSensor::updateVerticalMotion(float xG, float yG, float zG,
     gravityXG_ = xG;
     gravityYG_ = yG;
     gravityZG_ = zG;
-    lastMotionSampleMs_ = now;
+    quietSinceMs_ = now;
+    motionDetectorArmed_ = false;
     return;
   }
 
@@ -245,30 +255,47 @@ void AttitudeSensor::updateVerticalMotion(float xG, float yG, float zG,
       kVerticalAccelerationAlpha *
       (verticalAccelerationG - filteredVerticalAccelerationG_);
 
-  const float elapsedSeconds =
-      constrain(static_cast<float>(now - lastMotionSampleMs_) / 1000.0f,
-                0.005f, 0.05f);
-  lastMotionSampleMs_ = now;
-  verticalVelocityMps_ =
-      kVelocityLeak * verticalVelocityMps_ +
-      filteredVerticalAccelerationG_ * kGravityMps2 * elapsedSeconds;
-  verticalVelocityMps_ = constrain(verticalVelocityMps_, -0.5f, 0.5f);
-
   // Slowly learn the stationary gravity vector so sensor bias cannot create a
-  // permanent rise/fall indication. Strong movement is not learned as gravity.
-  if (fabsf(filteredVerticalAccelerationG_) < 0.025f) {
+  // permanent rise/fall indication. Motion is detected from the first impulse
+  // and latched; the opposite impulse when the platform stops is ignored.
+  const float absoluteVerticalAcceleration =
+      fabsf(filteredVerticalAccelerationG_);
+  if (absoluteVerticalAcceleration < kQuietAccelerationG) {
     gravityXG_ += kGravityTrackingAlpha * (xG - gravityXG_);
     gravityYG_ += kGravityTrackingAlpha * (yG - gravityYG_);
     gravityZG_ += kGravityTrackingAlpha * (zG - gravityZG_);
+    if (quietSinceMs_ == 0) quietSinceMs_ = now;
+  } else {
+    quietSinceMs_ = 0;
   }
 
-  if (verticalVelocityMps_ > kMotionStartMps) {
-    verticalMotion_ = VerticalMotion::Rising;
-  } else if (verticalVelocityMps_ < -kMotionStartMps) {
-    verticalMotion_ = VerticalMotion::Falling;
-  } else if (fabsf(verticalVelocityMps_) < kMotionStopMps) {
-    verticalMotion_ = VerticalMotion::Steady;
+  if (!motionDetectorArmed_) {
+    if (motionDisplayUntilMs_ != 0 &&
+        static_cast<int32_t>(now - motionDisplayUntilMs_) >= 0) {
+      motionDisplayUntilMs_ = 0;
+      verticalMotion_ = VerticalMotion::Steady;
+    }
+    if (motionDisplayUntilMs_ == 0 && quietSinceMs_ != 0 &&
+        now - quietSinceMs_ >= kRearmQuietMs) {
+      motionDetectorArmed_ = true;
+    }
+    return;
   }
+
+  if (filteredVerticalAccelerationG_ >= kMotionTriggerG) {
+    verticalMotion_ = VerticalMotion::Rising;
+  } else if (filteredVerticalAccelerationG_ <= -kMotionTriggerG) {
+    verticalMotion_ = VerticalMotion::Falling;
+  } else {
+    verticalMotion_ = VerticalMotion::Steady;
+    return;
+  }
+
+  motionDetectorArmed_ = false;
+  motionDisplayUntilMs_ = now + kMotionDisplayMs;
+  quietSinceMs_ = 0;
+  Serial.printf("[attitude] vertical motion: %s (%.3f g)\n",
+                verticalMotionName(), filteredVerticalAccelerationG_);
 }
 
 void AttitudeSensor::updateDemo() {
