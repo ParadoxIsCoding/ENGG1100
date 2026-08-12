@@ -18,6 +18,12 @@ constexpr uint8_t kCandidateAddresses[] = {0x1D, 0x1C};
 constexpr uint32_t kReadIntervalMs = 10;
 constexpr uint32_t kReconnectIntervalMs = 1000;
 constexpr float kLowPassAlpha = 0.35f;
+constexpr float kGravityTrackingAlpha = 0.01f;
+constexpr float kVerticalAccelerationAlpha = 0.25f;
+constexpr float kVelocityLeak = 0.999f;
+constexpr float kGravityMps2 = 9.80665f;
+constexpr float kMotionStartMps = 0.025f;
+constexpr float kMotionStopMps = 0.012f;
 constexpr float kRadiansToDegrees = 57.2957795f;
 
 }  // namespace
@@ -80,15 +86,23 @@ void AttitudeSensor::update() {
     filteredXG_ = xG;
     filteredYG_ = yG;
     filteredZG_ = zG;
+    gravityXG_ = xG;
+    gravityYG_ = yG;
+    gravityZG_ = zG;
+    filteredVerticalAccelerationG_ = 0.0f;
+    verticalVelocityMps_ = 0.0f;
+    verticalMotion_ = VerticalMotion::Steady;
+    lastMotionSampleMs_ = now;
     filterInitialised_ = true;
   } else {
+    updateVerticalMotion(xG, yG, zG, now);
     filteredXG_ += kLowPassAlpha * (xG - filteredXG_);
     filteredYG_ += kLowPassAlpha * (yG - filteredYG_);
     filteredZG_ += kLowPassAlpha * (zG - filteredZG_);
   }
 
   rawPitchDegrees_ =
-      atan2f(-filteredXG_,
+      atan2f(filteredXG_,
              sqrtf(filteredYG_ * filteredYG_ + filteredZG_ * filteredZG_)) *
       kRadiansToDegrees;
   rawRollDegrees_ = atan2f(filteredYG_, filteredZG_) * kRadiansToDegrees;
@@ -108,6 +122,18 @@ float AttitudeSensor::pitchDegrees() const {
 
 float AttitudeSensor::rollDegrees() const {
   return rawRollDegrees_ - rollOffsetDegrees_;
+}
+
+const char* AttitudeSensor::verticalMotionName() const {
+  switch (verticalMotion_) {
+    case VerticalMotion::Rising:
+      return "rising";
+    case VerticalMotion::Falling:
+      return "falling";
+    case VerticalMotion::Steady:
+    default:
+      return "steady";
+  }
 }
 
 bool AttitudeSensor::connected() const { return connected_; }
@@ -196,9 +222,62 @@ bool AttitudeSensor::readAcceleration(float& xG, float& yG, float& zG) {
   return true;
 }
 
+void AttitudeSensor::updateVerticalMotion(float xG, float yG, float zG,
+                                          uint32_t now) {
+  const float gravityMagnitude =
+      sqrtf(gravityXG_ * gravityXG_ + gravityYG_ * gravityYG_ +
+            gravityZG_ * gravityZG_);
+  if (gravityMagnitude < 0.5f) {
+    gravityXG_ = xG;
+    gravityYG_ = yG;
+    gravityZG_ = zG;
+    lastMotionSampleMs_ = now;
+    return;
+  }
+
+  const float inverseGravity = 1.0f / gravityMagnitude;
+  const float verticalAccelerationG =
+      ((xG - gravityXG_) * gravityXG_ +
+       (yG - gravityYG_) * gravityYG_ +
+       (zG - gravityZG_) * gravityZG_) *
+      inverseGravity;
+  filteredVerticalAccelerationG_ +=
+      kVerticalAccelerationAlpha *
+      (verticalAccelerationG - filteredVerticalAccelerationG_);
+
+  const float elapsedSeconds =
+      constrain(static_cast<float>(now - lastMotionSampleMs_) / 1000.0f,
+                0.005f, 0.05f);
+  lastMotionSampleMs_ = now;
+  verticalVelocityMps_ =
+      kVelocityLeak * verticalVelocityMps_ +
+      filteredVerticalAccelerationG_ * kGravityMps2 * elapsedSeconds;
+  verticalVelocityMps_ = constrain(verticalVelocityMps_, -0.5f, 0.5f);
+
+  // Slowly learn the stationary gravity vector so sensor bias cannot create a
+  // permanent rise/fall indication. Strong movement is not learned as gravity.
+  if (fabsf(filteredVerticalAccelerationG_) < 0.025f) {
+    gravityXG_ += kGravityTrackingAlpha * (xG - gravityXG_);
+    gravityYG_ += kGravityTrackingAlpha * (yG - gravityYG_);
+    gravityZG_ += kGravityTrackingAlpha * (zG - gravityZG_);
+  }
+
+  if (verticalVelocityMps_ > kMotionStartMps) {
+    verticalMotion_ = VerticalMotion::Rising;
+  } else if (verticalVelocityMps_ < -kMotionStartMps) {
+    verticalMotion_ = VerticalMotion::Falling;
+  } else if (fabsf(verticalVelocityMps_) < kMotionStopMps) {
+    verticalMotion_ = VerticalMotion::Steady;
+  }
+}
+
 void AttitudeSensor::updateDemo() {
   const float seconds = static_cast<float>(millis()) / 1000.0f;
   rawPitchDegrees_ = 8.0f * sinf(seconds * 0.55f) +
                      3.5f * sinf(seconds * 0.19f);
   rawRollDegrees_ = 12.0f * sinf(seconds * 0.38f + 0.8f);
+  const float demoVerticalMotion = sinf(seconds * 0.7f);
+  verticalMotion_ = demoVerticalMotion > 0.3f   ? VerticalMotion::Rising
+                    : demoVerticalMotion < -0.3f ? VerticalMotion::Falling
+                                                 : VerticalMotion::Steady;
 }

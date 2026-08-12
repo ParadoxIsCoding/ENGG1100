@@ -61,7 +61,7 @@ int8_t currentJoystickAxis(bool xAxis) {
 String statusJson() {
   attitude.update();
   String json;
-  json.reserve(260);
+  json.reserve(290);
   json = F("{\"motion\":\"");
   json += motionName(currentMotion());
   json += F("\",\"estop\":");
@@ -80,6 +80,9 @@ String statusJson() {
   json += String(attitude.pitchDegrees(), 1);
   json += F(",\"roll\":");
   json += String(attitude.rollDegrees(), 1);
+  json += F(",\"verticalMotion\":\"");
+  json += attitude.verticalMotionName();
+  json += F("\"");
   json += F(",\"attitudeDemo\":");
   json += attitude.demoMode() ? F("true") : F("false");
   json += F(",\"attitudeConnected\":");

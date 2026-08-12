@@ -43,6 +43,8 @@ const char kControlPage[] PROGMEM = R"HTML(
     .attitude-value strong { display: block; margin-top: .08rem; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
     #tilt-status { justify-self: stretch; padding: .35rem .4rem; border: 1px solid currentColor; border-radius: .6rem; font-size: .69rem; font-weight: 800; letter-spacing: .05em; text-align: center; }
     .tilt-green { color: #70f0b0; } .tilt-amber { color: #ffc85c; } .tilt-red { color: #ff7a86; }
+    #vertical-motion { grid-column: 1 / -1; padding: .3rem .4rem; border: 1px solid #31475f; border-radius: .6rem; font-size: .72rem; font-weight: 800; letter-spacing: .07em; text-align: center; }
+    .motion-steady { color: #a9bad0; } .motion-rising { color: #70f0b0; } .motion-falling { color: #75bfff; }
     .level { min-height: 2.3rem; padding: 0 .4rem; white-space: nowrap; }
     .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: .45rem; margin-top: .65rem; padding: .25rem; border: 1px solid #263b52; border-radius: .85rem; background: #0c1928; }
     .tab { min-height: 2.7rem; border: 0; border-radius: .65rem; background: transparent; color: #9db0c4; }
@@ -100,6 +102,7 @@ const char kControlPage[] PROGMEM = R"HTML(
       <div class="attitude-value"><span>ROLL</span><strong id="roll">0.0°</strong></div>
       <button class="level" id="set-level">SET LEVEL</button>
       <span id="tilt-status" class="tilt-green">LEVEL</span>
+      <span id="vertical-motion" class="motion-steady">● STEADY</span>
     </div>
   </section>
 
@@ -152,6 +155,7 @@ const char kControlPage[] PROGMEM = R"HTML(
   const pitchValue = document.querySelector('#pitch');
   const rollValue = document.querySelector('#roll');
   const tiltStatus = document.querySelector('#tilt-status');
+  const verticalMotion = document.querySelector('#vertical-motion');
   const deadZone = .12;
   let heldMotion = null;
   let joystickPointer = null;
@@ -200,11 +204,15 @@ const char kControlPage[] PROGMEM = R"HTML(
     if (!data.attitudeConnected && !data.attitudeDemo) {
       tiltStatus.textContent = 'IMU OFFLINE';
       tiltStatus.className = 'tilt-red';
+      verticalMotion.textContent = '— MOTION';
+      verticalMotion.className = 'motion-steady';
       return;
     }
     const pitch = data.pitch;
     const roll = data.roll;
-    const pitchOffset = -pitch * 2;
+    // Pitch is positive when the nose rises. Keep the established horizon
+    // animation direction while presenting that conventional numeric sign.
+    const pitchOffset = pitch * 2;
     horizonWorld.style.transform = `translate(-50%,calc(-50% + ${pitchOffset}px)) rotate(${-roll}deg)`;
     pitchValue.textContent = `${pitch.toFixed(1)}°`;
     rollValue.textContent = `${roll.toFixed(1)}°`;
@@ -212,6 +220,13 @@ const char kControlPage[] PROGMEM = R"HTML(
     const level = tilt < 5 ? ['LEVEL','tilt-green'] : tilt <= 10 ? ['CAUTION','tilt-amber'] : ['HIGH TILT','tilt-red'];
     tiltStatus.textContent = level[0];
     tiltStatus.className = level[1];
+    const motion = data.verticalMotion === 'rising'
+      ? ['↑ RISING','motion-rising']
+      : data.verticalMotion === 'falling'
+        ? ['↓ FALLING','motion-falling']
+        : ['● STEADY','motion-steady'];
+    verticalMotion.textContent = motion[0];
+    verticalMotion.className = motion[1];
     document.querySelector('.horizon').setAttribute('aria-label', `Pitch ${pitch.toFixed(1)} degrees, roll ${roll.toFixed(1)} degrees`);
   }
 
