@@ -10,13 +10,17 @@ enum class Motion : uint8_t {
   Right,
   RotateLeft,
   RotateRight,
-  WinchesPayout,
-  WinchesRetrieve,
-  LeftWinchPayout,
-  LeftWinchRetrieve,
-  RightWinchPayout,
-  RightWinchRetrieve,
   Joystick,
+  AllPayout,
+  AllRetrieve,
+  FrontLeftPayout,
+  FrontLeftRetrieve,
+  FrontRightPayout,
+  FrontRightRetrieve,
+  RearLeftPayout,
+  RearLeftRetrieve,
+  RearRightPayout,
+  RearRightRetrieve,
 };
 
 class MotorController {

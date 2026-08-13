@@ -19,21 +19,19 @@ constexpr uint8_t kMotorPwmResolutionBits = 8;
 constexpr uint8_t kWinchPowerPercent = 65;
 
 // ESP32-WROOM-32U GPIO map. Do not use GPIO 6-11: they are connected to flash.
-// Each L9110S motor channel uses two logic inputs.
-constexpr uint8_t kFrontLeftA = 13;
-constexpr uint8_t kFrontLeftB = 14;
-constexpr uint8_t kFrontRightA = 16;
-constexpr uint8_t kFrontRightB = 17;
-constexpr uint8_t kRearLeftA = 18;
-constexpr uint8_t kRearLeftB = 19;
-constexpr uint8_t kRearRightA = 25;
-constexpr uint8_t kRearRightB = 26;
-
-// Two reversible geared tether winches, each through one H-bridge channel.
-constexpr uint8_t kLeftWinchA = 27;
-constexpr uint8_t kLeftWinchB = 32;
-constexpr uint8_t kRightWinchA = 23;
-constexpr uint8_t kRightWinchB = 33;
+// One N20 motor with a 3D-printed pulley sits at each corner and spools a
+// fishing-line tether to a fixed anchor point in that corner's direction.
+// Reeling a tether in pulls the house that way; the opposite corner(s) must
+// pay out at the same time. Two dual-channel L9110S boards drive all four
+// corner winches (one board per motor pair, channel A/B per motor).
+constexpr uint8_t kFrontLeftWinchA = 13;
+constexpr uint8_t kFrontLeftWinchB = 14;
+constexpr uint8_t kFrontRightWinchA = 16;
+constexpr uint8_t kFrontRightWinchB = 17;
+constexpr uint8_t kRearLeftWinchA = 18;
+constexpr uint8_t kRearLeftWinchB = 19;
+constexpr uint8_t kRearRightWinchA = 25;
+constexpr uint8_t kRearRightWinchB = 26;
 
 // Jaycar XC3732 / Keyestudio KS0270 (MMA8452Q) I2C bus.
 constexpr uint8_t kI2cSda = 21;

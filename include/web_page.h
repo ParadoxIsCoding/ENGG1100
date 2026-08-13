@@ -125,16 +125,20 @@ const char kControlPage[] PROGMEM = R"HTML(
     </div>
   </section>
 
-  <section class="control-view" id="winch-controls" aria-label="Hold-to-run tether winch controls" hidden>
+  <section class="control-view" id="winch-controls" aria-label="Hold-to-run individual corner winch controls" hidden>
     <div class="tether-controls">
-      <button class="payout" data-motion="winches-payout" aria-label="Hold to pay both ropes out">↑<br>BOTH OUT</button>
-      <button class="retrieve" data-motion="winches-retrieve" aria-label="Hold to take both ropes in">↓<br>BOTH IN</button>
+      <button class="payout" data-motion="all-payout" aria-label="Hold to pay all four tethers out">↑<br>ALL OUT</button>
+      <button class="retrieve" data-motion="all-retrieve" aria-label="Hold to take all four tethers in">↓<br>ALL IN</button>
     </div>
     <div class="trim-controls">
-      <button data-motion="left-winch-payout" aria-label="Hold to pay left rope out">L ↑ OUT</button>
-      <button data-motion="right-winch-payout" aria-label="Hold to pay right rope out">R ↑ OUT</button>
-      <button data-motion="left-winch-retrieve" aria-label="Hold to take left rope in">L ↓ IN</button>
-      <button data-motion="right-winch-retrieve" aria-label="Hold to take right rope in">R ↓ IN</button>
+      <button data-motion="front-left-payout" aria-label="Hold to pay the front-left tether out">FL ↑ OUT</button>
+      <button data-motion="front-left-retrieve" aria-label="Hold to take the front-left tether in">FL ↓ IN</button>
+      <button data-motion="front-right-payout" aria-label="Hold to pay the front-right tether out">FR ↑ OUT</button>
+      <button data-motion="front-right-retrieve" aria-label="Hold to take the front-right tether in">FR ↓ IN</button>
+      <button data-motion="rear-left-payout" aria-label="Hold to pay the rear-left tether out">RL ↑ OUT</button>
+      <button data-motion="rear-left-retrieve" aria-label="Hold to take the rear-left tether in">RL ↓ IN</button>
+      <button data-motion="rear-right-payout" aria-label="Hold to pay the rear-right tether out">RR ↑ OUT</button>
+      <button data-motion="rear-right-retrieve" aria-label="Hold to take the rear-right tether in">RR ↓ IN</button>
     </div>
   </section>
 </main>
@@ -197,8 +201,8 @@ const char kControlPage[] PROGMEM = R"HTML(
     if (Number.isFinite(data.deadZonePercent)) deadZone = data.deadZonePercent / 100;
     state.textContent = data.estop ? 'EMERGENCY STOP LATCHED' :
       data.motion === 'joystick' ? `JOYSTICK  X ${data.x} · Y ${data.y}` :
-      data.motion === 'winches-payout' ? 'TETHERS: BOTH PAYING OUT' :
-      data.motion === 'winches-retrieve' ? 'TETHERS: BOTH TAKING IN' :
+      data.motion === 'all-payout' ? 'TETHERS: ALL PAYING OUT' :
+      data.motion === 'all-retrieve' ? 'TETHERS: ALL TAKING IN' :
       data.motion.replace(/-/g, ' ').toUpperCase();
     reset.hidden = !data.estop;
     renderAttitude(data);
