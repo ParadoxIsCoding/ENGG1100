@@ -156,7 +156,7 @@ const char kControlPage[] PROGMEM = R"HTML(
   const rollValue = document.querySelector('#roll');
   const tiltStatus = document.querySelector('#tilt-status');
   const verticalMotion = document.querySelector('#vertical-motion');
-  const deadZone = .12;
+  let deadZone = .12; // Overwritten from the server's deadZonePercent once status is known.
   let heldMotion = null;
   let joystickPointer = null;
   let joystickX = 0;
@@ -166,12 +166,16 @@ const char kControlPage[] PROGMEM = R"HTML(
   let requestSequence = 0;
   let statusInFlight = false;
 
+  // Distinguishes "server responded with an error" (show its message) from
+  // a network failure (show the generic disconnected state).
+  class ServerError extends Error {}
+
   async function post(path, body = '') {
     const sequence = ++requestSequence;
     try {
       const response = await fetch(path, {method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body,cache:'no-store'});
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || response.statusText);
+      if (!response.ok) throw new ServerError(data.error || response.statusText);
       if (sequence === requestSequence) render(data);
       return true;
     } catch (error) {
@@ -179,7 +183,9 @@ const char kControlPage[] PROGMEM = R"HTML(
       clearMotionState();
       connection.textContent = 'Disconnected';
       connection.className = 'pill offline';
-      state.textContent = 'CONNECTION LOST — AUTO STOP';
+      state.textContent = error instanceof ServerError
+        ? error.message.toUpperCase()
+        : 'CONNECTION LOST — AUTO STOP';
       return false;
     }
   }
@@ -188,6 +194,7 @@ const char kControlPage[] PROGMEM = R"HTML(
     connection.textContent = 'ONLINE';
     connection.className = 'pill online';
     mode.textContent = data.testMode ? 'TEST MODE' : 'HARDWARE';
+    if (Number.isFinite(data.deadZonePercent)) deadZone = data.deadZonePercent / 100;
     state.textContent = data.estop ? 'EMERGENCY STOP LATCHED' :
       data.motion === 'joystick' ? `JOYSTICK  X ${data.x} · Y ${data.y}` :
       data.motion === 'winches-payout' ? 'TETHERS: BOTH PAYING OUT' :
@@ -231,15 +238,17 @@ const char kControlPage[] PROGMEM = R"HTML(
   }
 
   async function refreshStatus() {
-    if (statusInFlight) return;
+    if (document.hidden || statusInFlight) return;
     statusInFlight = true;
     try {
       const response = await fetch('/api/status', {cache:'no-store'});
-      if (!response.ok) throw new Error(response.statusText);
-      render(await response.json());
+      const data = await response.json();
+      if (!response.ok) throw new ServerError(data.error || response.statusText);
+      render(data);
     } catch (error) {
       connection.textContent = 'Disconnected';
       connection.className = 'pill offline';
+      if (error instanceof ServerError) state.textContent = error.message.toUpperCase();
     } finally {
       statusInFlight = false;
     }

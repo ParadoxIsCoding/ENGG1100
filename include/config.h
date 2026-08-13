@@ -12,6 +12,7 @@ constexpr char kAccessPointName[] = "ENGG1100-Lavender";
 constexpr char kAccessPointPassword[] = "station1100";
 constexpr uint16_t kHttpPort = 80;
 constexpr uint32_t kDeadmanTimeoutMs = 600;
+constexpr uint32_t kMotorMutexTimeoutMs = 50;
 constexpr uint8_t kJoystickDeadZonePercent = 12;
 constexpr uint16_t kMotorPwmFrequencyHz = 20000;
 constexpr uint8_t kMotorPwmResolutionBits = 8;

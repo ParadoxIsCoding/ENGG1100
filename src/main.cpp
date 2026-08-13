@@ -18,54 +18,66 @@ bool emergencyStopLatched = false;
 volatile bool motionActive = false;
 volatile uint32_t lastValidMotionMs = 0;
 
-Motion currentMotion() {
-  if (motorMutex == nullptr ||
-      xSemaphoreTake(motorMutex, pdMS_TO_TICKS(50)) != pdTRUE) {
-    return Motion::Stopped;
+// Takes motorMutex for its scope. Check ok() before touching motor state;
+// on timeout/missing mutex the lock is simply not held.
+class MotorMutexGuard {
+ public:
+  MotorMutexGuard()
+      : locked_(motorMutex != nullptr &&
+                xSemaphoreTake(motorMutex,
+                               pdMS_TO_TICKS(Config::kMotorMutexTimeoutMs)) ==
+                    pdTRUE) {}
+  ~MotorMutexGuard() {
+    if (locked_) xSemaphoreGive(motorMutex);
   }
-  const Motion result = motors.motion();
-  xSemaphoreGive(motorMutex);
-  return result;
+  MotorMutexGuard(const MotorMutexGuard&) = delete;
+  MotorMutexGuard& operator=(const MotorMutexGuard&) = delete;
+
+  bool ok() const { return locked_; }
+
+ private:
+  bool locked_;
+};
+
+Motion currentMotion() {
+  MotorMutexGuard guard;
+  return guard.ok() ? motors.motion() : Motion::Stopped;
 }
 
 void applyMotion(Motion motion) {
-  if (motorMutex == nullptr ||
-      xSemaphoreTake(motorMutex, pdMS_TO_TICKS(50)) != pdTRUE) {
+  MotorMutexGuard guard;
+  if (!guard.ok()) {
     motionActive = false;
     return;
   }
   motors.apply(motion);
-  xSemaphoreGive(motorMutex);
 }
 
 void applyJoystick(int8_t xPercent, int8_t yPercent) {
-  if (motorMutex == nullptr ||
-      xSemaphoreTake(motorMutex, pdMS_TO_TICKS(50)) != pdTRUE) {
+  MotorMutexGuard guard;
+  if (!guard.ok()) {
     motionActive = false;
     return;
   }
   motors.applyJoystick(xPercent, yPercent);
-  xSemaphoreGive(motorMutex);
 }
 
 int8_t currentJoystickAxis(bool xAxis) {
-  if (motorMutex == nullptr ||
-      xSemaphoreTake(motorMutex, pdMS_TO_TICKS(50)) != pdTRUE) {
-    return 0;
-  }
-  const int8_t result = xAxis ? motors.joystickX() : motors.joystickY();
-  xSemaphoreGive(motorMutex);
-  return result;
+  MotorMutexGuard guard;
+  if (!guard.ok()) return 0;
+  return xAxis ? motors.joystickX() : motors.joystickY();
 }
 
 String statusJson() {
   attitude.update();
   String json;
-  json.reserve(290);
+  json.reserve(320);
   json = F("{\"motion\":\"");
   json += motionName(currentMotion());
   json += F("\",\"estop\":");
   json += emergencyStopLatched ? F("true") : F("false");
+  json += F(",\"deadZonePercent\":");
+  json += static_cast<int>(Config::kJoystickDeadZonePercent);
   json += F(",\"x\":");
   json += static_cast<int>(currentJoystickAxis(true));
   json += F(",\"y\":");
@@ -107,13 +119,10 @@ void sendJson(int code, const String& body) {
 }
 
 void stopForSafety(const char* reason) {
-  if (motorMutex == nullptr ||
-      xSemaphoreTake(motorMutex, pdMS_TO_TICKS(50)) != pdTRUE) {
-    return;
-  }
+  MotorMutexGuard guard;
+  if (!guard.ok()) return;
   const bool wasMoving = motors.motion() != Motion::Stopped;
   motors.stop();
-  xSemaphoreGive(motorMutex);
   if (wasMoving) {
     Serial.printf("[safety] stop: %s\n", reason);
   }

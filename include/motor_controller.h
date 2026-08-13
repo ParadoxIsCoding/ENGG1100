@@ -36,6 +36,7 @@ class MotorController {
 
  private:
   void drive(const MotorPins& motor, int16_t powerPercent);
+  void stopAllChannels();
   void logMotion(Motion motion) const;
 
   Motion motion_ = Motion::Stopped;

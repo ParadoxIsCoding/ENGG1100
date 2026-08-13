@@ -167,11 +167,7 @@ void MotorController::drive(const MotorPins& motor, int16_t powerPercent) {
 #endif
 }
 
-void MotorController::apply(Motion motion) {
-  if (motion != Motion::Stopped && motion == motion_) {
-    return;
-  }
-
+void MotorController::stopAllChannels() {
   // Stop all channels before changing direction to avoid shoot-through and
   // sudden opposite-direction transitions.
   drive(kFrontLeft, 0);
@@ -180,6 +176,14 @@ void MotorController::apply(Motion motion) {
   drive(kRearRight, 0);
   drive(kLeftWinch, 0);
   drive(kRightWinch, 0);
+}
+
+void MotorController::apply(Motion motion) {
+  if (motion != Motion::Stopped && motion == motion_) {
+    return;
+  }
+
+  stopAllChannels();
   joystickX_ = 0;
   joystickY_ = 0;
 
@@ -288,12 +292,7 @@ void MotorController::applyJoystick(int8_t xPercent, int8_t yPercent) {
   }
 
   // Briefly stop every H-bridge input before applying a changed mix.
-  drive(kFrontLeft, 0);
-  drive(kFrontRight, 0);
-  drive(kRearLeft, 0);
-  drive(kRearRight, 0);
-  drive(kLeftWinch, 0);
-  drive(kRightWinch, 0);
+  stopAllChannels();
   drive(kFrontLeft, left);
   drive(kRearLeft, left);
   drive(kFrontRight, right);
