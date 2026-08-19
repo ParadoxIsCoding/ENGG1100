@@ -2,6 +2,10 @@
 
 #include <Arduino.h>
 
+// Driver for a GY-521 MPU6050 board wired to I2C (Config::kI2cSda/kI2cScl).
+// Only the accelerometer is used to compute pitch/roll; the gyroscope is
+// left uninitialised, matching the "monitoring only, no auto-levelling"
+// scope for this stage of the project.
 class AttitudeSensor {
  public:
   void begin();

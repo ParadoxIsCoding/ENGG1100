@@ -17,6 +17,8 @@ SemaphoreHandle_t motorMutex = nullptr;
 bool emergencyStopLatched = false;
 volatile bool motionActive = false;
 volatile uint32_t lastValidMotionMs = 0;
+String lastCommandLabel = "none";
+String lastSafetyReason = "none";
 
 // Takes motorMutex for its scope. Check ok() before touching motor state;
 // on timeout/missing mutex the lock is simply not held.
@@ -68,6 +70,25 @@ int8_t currentJoystickAxis(bool xAxis) {
   return xAxis ? motors.joystickX() : motors.joystickY();
 }
 
+struct MotorPowers {
+  int8_t frontLeft;
+  int8_t frontRight;
+  int8_t rearLeft;
+  int8_t rearRight;
+};
+
+MotorPowers currentMotorPowers() {
+  MotorMutexGuard guard;
+  if (!guard.ok()) return {0, 0, 0, 0};
+  return {motors.frontLeftPowerPercent(), motors.frontRightPowerPercent(),
+          motors.rearLeftPowerPercent(), motors.rearRightPowerPercent()};
+}
+
+uint8_t currentSpeedPercent() {
+  MotorMutexGuard guard;
+  return guard.ok() ? motors.speedPercent() : 0;
+}
+
 String statusJson() {
   attitude.update();
   String json;
@@ -99,6 +120,34 @@ String statusJson() {
   json += attitude.demoMode() ? F("true") : F("false");
   json += F(",\"attitudeConnected\":");
   json += attitude.connected() ? F("true") : F("false");
+  json += F(",\"speedPercent\":");
+  json += static_cast<int>(currentSpeedPercent());
+  json += F(",\"minSpeedPercent\":");
+  json += static_cast<int>(Config::kMinSpeedPercent);
+  json += F(",\"maxSpeedPercent\":");
+  json += static_cast<int>(Config::kMaxSpeedPercent);
+  json += F(",\"uptimeMs\":");
+  json += String(millis());
+  json += F(",\"clients\":");
+  json += static_cast<int>(WiFi.softAPgetStationNum());
+  json += F(",\"lastCommand\":\"");
+  json += lastCommandLabel;
+  json += F("\",\"lastSafetyEvent\":\"");
+  json += lastSafetyReason;
+  json += F("\",\"deadmanActive\":");
+  json += motionActive ? F("true") : F("false");
+  {
+    const MotorPowers powers = currentMotorPowers();
+    json += F(",\"motorPower\":{\"frontLeft\":");
+    json += static_cast<int>(powers.frontLeft);
+    json += F(",\"frontRight\":");
+    json += static_cast<int>(powers.frontRight);
+    json += F(",\"rearLeft\":");
+    json += static_cast<int>(powers.rearLeft);
+    json += F(",\"rearRight\":");
+    json += static_cast<int>(powers.rearRight);
+    json += F("}");
+  }
   json += F("}");
   return json;
 }
@@ -119,6 +168,7 @@ void sendJson(int code, const String& body) {
 }
 
 void stopForSafety(const char* reason) {
+  lastSafetyReason = reason;
   MotorMutexGuard guard;
   if (!guard.ok()) return;
   const bool wasMoving = motors.motion() != Motion::Stopped;
@@ -166,6 +216,7 @@ void handleMove() {
     return;
   }
 
+  lastCommandLabel = motionName(requested);
   lastValidMotionMs = millis();
   applyMotion(requested);
   motionActive = currentMotion() != Motion::Stopped;
@@ -189,6 +240,7 @@ void handleDrive() {
     return;
   }
 
+  lastCommandLabel = "joystick";
   lastValidMotionMs = millis();
   applyJoystick(xPercent, yPercent);
   motionActive = currentMotion() != Motion::Stopped;
@@ -196,12 +248,14 @@ void handleDrive() {
 }
 
 void handleStop() {
+  lastCommandLabel = "stop";
   motionActive = false;
   stopForSafety("stop command");
   sendJson(200, statusJson());
 }
 
 void handleEmergencyStop() {
+  lastCommandLabel = "estop";
   emergencyStopLatched = true;
   motionActive = false;
   stopForSafety("emergency stop");
@@ -209,8 +263,27 @@ void handleEmergencyStop() {
   sendJson(200, statusJson());
 }
 
+void handleSpeed() {
+  if (!server.hasArg("value")) {
+    sendJson(400, F("{\"error\":\"Missing value\"}"));
+    return;
+  }
+  int8_t percent = 0;
+  if (!parsePercent(server.arg("value"), percent) || percent < 0) {
+    sendJson(400, F("{\"error\":\"value must be 0-100\"}"));
+    return;
+  }
+  {
+    MotorMutexGuard guard;
+    if (guard.ok()) motors.setSpeedPercent(static_cast<uint8_t>(percent));
+  }
+  Serial.printf("[motors] speed set to %u%%\n", currentSpeedPercent());
+  sendJson(200, statusJson());
+}
+
 void handleClearEmergencyStop() {
   // Clearing the latch never starts motion; a new hold-to-run command is needed.
+  lastCommandLabel = "estop-clear";
   motionActive = false;
   stopForSafety("clear emergency stop");
   emergencyStopLatched = false;
@@ -220,7 +293,7 @@ void handleClearEmergencyStop() {
 
 void handleSetLevel() {
   if (!attitude.setLevel()) {
-    sendJson(503, F("{\"error\":\"MMA8452Q is not connected\"}"));
+    sendJson(503, F("{\"error\":\"MPU6050 is not connected\"}"));
     return;
   }
   Serial.println("[attitude] current position set as level");
@@ -239,6 +312,7 @@ void configureServer() {
   server.on("/api/stop", HTTP_POST, handleStop);
   server.on("/api/estop", HTTP_POST, handleEmergencyStop);
   server.on("/api/estop/clear", HTTP_POST, handleClearEmergencyStop);
+  server.on("/api/speed", HTTP_POST, handleSpeed);
   server.on("/api/attitude/level", HTTP_POST, handleSetLevel);
   server.onNotFound([]() {
     stopForSafety("unknown request");
@@ -247,13 +321,36 @@ void configureServer() {
   server.begin();
 }
 
+void printPinAssignments() {
+  Serial.println("Motor pin assignments (GPIO):");
+  Serial.printf("  Front Left : A=%u B=%u%s\n", Config::kFrontLeftWinchA,
+                Config::kFrontLeftWinchB,
+                Config::kFrontLeftInverted ? " (inverted)" : "");
+  Serial.printf("  Front Right: A=%u B=%u%s\n", Config::kFrontRightWinchA,
+                Config::kFrontRightWinchB,
+                Config::kFrontRightInverted ? " (inverted)" : "");
+  Serial.printf("  Rear Left  : A=%u B=%u%s\n", Config::kRearLeftWinchA,
+                Config::kRearLeftWinchB,
+                Config::kRearLeftInverted ? " (inverted)" : "");
+  Serial.printf("  Rear Right : A=%u B=%u%s\n", Config::kRearRightWinchA,
+                Config::kRearRightWinchB,
+                Config::kRearRightInverted ? " (inverted)" : "");
+  Serial.printf("  I2C: SDA=%u SCL=%u\n", Config::kI2cSda, Config::kI2cScl);
+}
+
 }  // namespace
 
 void setup() {
-  // Motor safety is established before Wi-Fi or the web server starts.
+  // Required safe startup order:
+  // 1. Serial. 2-4. Motor GPIO configured as outputs and forced LOW.
+  // 5. Emergency-stop/failsafe state initialised. 6. I2C/MPU6050 probe.
+  // 7-8. Wi-Fi AP and web server. All motor-control pins are LOW before any
+  // of steps 6-8 run.
   Serial.begin(115200);
-  motors.begin();
-  attitude.begin();
+
+  motors.begin();  // Configures all 8 motor GPIOs as outputs, forces them
+                    // LOW, and sets the internal motor state to STOPPED.
+
   motorMutex = xSemaphoreCreateMutex();
   if (motorMutex == nullptr ||
       xTaskCreate(safetyTask, "motor-safety", 2048, nullptr, 3, nullptr) !=
@@ -266,6 +363,8 @@ void setup() {
   motionActive = false;
   lastValidMotionMs = 0;
 
+  attitude.begin();  // I2C/MPU6050 probe; motor pins are already LOW.
+
   WiFi.onEvent(handleClientDisconnected,
                ARDUINO_EVENT_WIFI_AP_STADISCONNECTED);
   WiFi.mode(WIFI_AP);
@@ -276,14 +375,37 @@ void setup() {
   }
 
   configureServer();
+
   Serial.println();
   Serial.println("ENGG1100 Station Keeper ready");
-  Serial.printf("Mode: %s\n", TEST_MODE ? "TEST (no motor hardware required)"
-                                       : "HARDWARE");
-  Serial.printf("Wi-Fi: %s\n", Config::kAccessPointName);
-  Serial.printf("Open: http://%s/\n", WiFi.softAPIP().toString().c_str());
+  Serial.printf("Firmware mode: %s\n",
+                TEST_MODE ? "TEST (no motor hardware required)" : "HARDWARE");
+  Serial.printf("Board: %s\n",
+#if BOARD_S3
+                "ESP32-S3 N16R8 (esp32-s3-devkitc-1)"
+#else
+                "Standard ESP32 / ESP32-D0WD-V3 DevKit (esp32dev)"
+#endif
+  );
+  printPinAssignments();
+  Serial.printf("MPU6050: %s\n",
+                attitude.connected()
+                    ? "detected"
+                    : (attitude.demoMode() ? "not detected (test-mode demo active)"
+                                            : "not detected"));
+  Serial.printf("Wi-Fi SSID: %s\n", Config::kAccessPointName);
+  Serial.printf("Wi-Fi password: %s\n", Config::kAccessPointPassword);
+  Serial.printf("IP address: http://%s/\n",
+                WiFi.softAPIP().toString().c_str());
+  Serial.printf("Emergency stop: %s\n",
+                emergencyStopLatched ? "LATCHED" : "clear");
   Serial.printf("Dead-man timeout: %lu ms\n",
                 static_cast<unsigned long>(Config::kDeadmanTimeoutMs));
+  Serial.printf("Default speed: %u%%  Max speed: %u%%\n",
+                Config::kDefaultSpeedPercent, Config::kMaxSpeedPercent);
+  Serial.println(currentMotion() == Motion::Stopped
+                      ? "All motors confirmed STOPPED"
+                      : "[fatal] motors did not start in STOPPED state");
 }
 
 void loop() {

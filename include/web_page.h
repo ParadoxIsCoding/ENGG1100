@@ -76,6 +76,21 @@ const char kControlPage[] PROGMEM = R"HTML(
     .stop { background: #7c2731; border-color: #ca5866; font-size: 1rem; }
     .estop { background: #c92e3e; border-color: #ff7a86; font-size: 1rem; }
     .reset { grid-column: 1 / -1; min-height: 2.8rem; background: #172b42; }
+    .speed-row { display: flex; align-items: center; gap: .6rem; margin-top: .55rem; }
+    .speed-row label { flex: none; color: #9db0c4; font-size: .72rem; font-weight: 750; letter-spacing: .05em; }
+    .speed-row input[type=range] { flex: 1; }
+    .speed-row strong { flex: none; min-width: 3.4rem; text-align: right; font-variant-numeric: tabular-nums; }
+    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin-top: .6rem; }
+    .stat { padding: .4rem .5rem; border: 1px solid #263b52; border-radius: .6rem; background: #0c1928; overflow: hidden; }
+    .stat span { display: block; color: #9db0c4; font-size: .64rem; font-weight: 750; letter-spacing: .06em; }
+    .stat strong { display: block; margin-top: .05rem; font-size: .82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .motor-cards { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin-top: .6rem; }
+    .motor-card { padding: .45rem .5rem; border: 1px solid #263b52; border-radius: .6rem; background: #0c1928; text-align: center; }
+    .motor-card span { display: block; color: #9db0c4; font-size: .64rem; font-weight: 750; letter-spacing: .06em; }
+    .motor-card strong { display: block; margin-top: .1rem; font-size: .88rem; }
+    .motor-card.motor-in strong { color: #70f0b0; }
+    .motor-card.motor-out strong { color: #75bfff; }
+    .motor-card.motor-stopped strong { color: #9db0c4; }
     [hidden] { display: none; }
     @media (max-height: 700px) { .attitude-panel { grid-template-columns: 5.7rem 1fr; } .horizon { width: 5.7rem; } .joystick { width: min(48vw,11.5rem); } .tether-controls button { min-height: 4.2rem; } .trim-controls button { min-height: 3.4rem; } }
     @media (orientation: landscape) and (max-height: 520px) { main { width: min(100%,50rem); padding-bottom: calc(5.3rem + env(safe-area-inset-bottom)); } header { position: absolute; top: max(.45rem,env(safe-area-inset-top)); left: .75rem; right: .75rem; } .panel { width: 42%; margin-top: 2.5rem; } .tabs { width: 42%; } .control-view { position: absolute; top: max(.45rem,env(safe-area-inset-top)); right: .75rem; width: 53%; } .joystick { width: min(45vh,11rem); } .safety-dock { width: min(100%,50rem); } }
@@ -103,6 +118,26 @@ const char kControlPage[] PROGMEM = R"HTML(
       <button class="level" id="set-level">SET LEVEL</button>
       <span id="tilt-status" class="tilt-green">LEVEL</span>
       <span id="vertical-motion" class="motion-steady">● STEADY</span>
+    </div>
+  </section>
+
+  <section class="panel" aria-label="Telemetry and motor status">
+    <div class="speed-row">
+      <label for="speed">SPEED</label>
+      <input type="range" id="speed" min="0" max="100" value="20" aria-label="Motor speed percent, capped at the configured maximum">
+      <strong id="speed-value">20%</strong>
+    </div>
+    <div class="stat-grid">
+      <div class="stat"><span>UPTIME</span><strong id="uptime">0s</strong></div>
+      <div class="stat"><span>WI-FI CLIENTS</span><strong id="clients">0</strong></div>
+      <div class="stat"><span>LAST COMMAND</span><strong id="last-command">none</strong></div>
+      <div class="stat"><span>FAILSAFE</span><strong id="failsafe">none</strong></div>
+    </div>
+    <div class="motor-cards">
+      <div class="motor-card motor-stopped" id="card-fl"><span>FRONT LEFT</span><strong>STOPPED</strong></div>
+      <div class="motor-card motor-stopped" id="card-fr"><span>FRONT RIGHT</span><strong>STOPPED</strong></div>
+      <div class="motor-card motor-stopped" id="card-rl"><span>REAR LEFT</span><strong>STOPPED</strong></div>
+      <div class="motor-card motor-stopped" id="card-rr"><span>REAR RIGHT</span><strong>STOPPED</strong></div>
     </div>
   </section>
 
@@ -160,6 +195,18 @@ const char kControlPage[] PROGMEM = R"HTML(
   const rollValue = document.querySelector('#roll');
   const tiltStatus = document.querySelector('#tilt-status');
   const verticalMotion = document.querySelector('#vertical-motion');
+  const speedInput = document.querySelector('#speed');
+  const speedValue = document.querySelector('#speed-value');
+  const uptimeValue = document.querySelector('#uptime');
+  const clientsValue = document.querySelector('#clients');
+  const lastCommandValue = document.querySelector('#last-command');
+  const failsafeValue = document.querySelector('#failsafe');
+  const motorCards = {
+    frontLeft: document.querySelector('#card-fl'),
+    frontRight: document.querySelector('#card-fr'),
+    rearLeft: document.querySelector('#card-rl'),
+    rearRight: document.querySelector('#card-rr'),
+  };
   let deadZone = .12; // Overwritten from the server's deadZonePercent once status is known.
   let heldMotion = null;
   let joystickPointer = null;
@@ -169,6 +216,7 @@ const char kControlPage[] PROGMEM = R"HTML(
   let lastDriveSent = 0;
   let requestSequence = 0;
   let statusInFlight = false;
+  let speedDragging = false;
 
   // Distinguishes "server responded with an error" (show its message) from
   // a network failure (show the generic disconnected state).
@@ -206,6 +254,43 @@ const char kControlPage[] PROGMEM = R"HTML(
       data.motion.replace(/-/g, ' ').toUpperCase();
     reset.hidden = !data.estop;
     renderAttitude(data);
+    renderTelemetry(data);
+  }
+
+  function formatUptime(ms) {
+    if (!Number.isFinite(ms)) return '0s';
+    const totalSeconds = Math.floor(ms / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return hours > 0 ? `${hours}h ${minutes}m` : minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+  }
+
+  function motorCardText(power) {
+    if (!Number.isFinite(power) || power === 0) return ['STOPPED', 'motor-stopped'];
+    return power > 0 ? [`IN ${power}%`, 'motor-in'] : [`OUT ${Math.abs(power)}%`, 'motor-out'];
+  }
+
+  function renderTelemetry(data) {
+    if (Number.isFinite(data.maxSpeedPercent)) speedInput.max = data.maxSpeedPercent;
+    if (Number.isFinite(data.minSpeedPercent)) speedInput.min = data.minSpeedPercent;
+    if (Number.isFinite(data.speedPercent)) {
+      speedValue.textContent = `${data.speedPercent}%`;
+      if (!speedDragging) speedInput.value = data.speedPercent;
+    }
+    uptimeValue.textContent = formatUptime(data.uptimeMs);
+    if (Number.isFinite(data.clients)) clientsValue.textContent = data.clients;
+    if (data.lastCommand) lastCommandValue.textContent = data.lastCommand.replace(/-/g, ' ').toUpperCase();
+    if (data.lastSafetyEvent) failsafeValue.textContent = data.lastSafetyEvent.toUpperCase();
+    if (data.motorPower) {
+      for (const key of ['frontLeft', 'frontRight', 'rearLeft', 'rearRight']) {
+        const card = motorCards[key];
+        const [text, cls] = motorCardText(data.motorPower[key]);
+        card.querySelector('strong').textContent = text;
+        card.classList.remove('motor-in', 'motor-out', 'motor-stopped');
+        card.classList.add(cls);
+      }
+    }
   }
 
   function renderAttitude(data) {
@@ -376,6 +461,12 @@ const char kControlPage[] PROGMEM = R"HTML(
   document.querySelector('#estop').addEventListener('click', () => { endMotion(false); post('/api/estop'); });
   reset.addEventListener('click', () => post('/api/estop/clear'));
   document.querySelector('#set-level').addEventListener('click', () => post('/api/attitude/level'));
+  speedInput.addEventListener('pointerdown', () => { speedDragging = true; });
+  speedInput.addEventListener('input', () => { speedValue.textContent = `${speedInput.value}%`; });
+  speedInput.addEventListener('change', () => {
+    speedDragging = false;
+    post('/api/speed', 'value=' + encodeURIComponent(speedInput.value));
+  });
   window.addEventListener('blur', endMotion);
   window.addEventListener('offline', endMotion);
   window.addEventListener('pagehide', stopForPageExit);

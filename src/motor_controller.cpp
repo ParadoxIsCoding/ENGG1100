@@ -8,14 +8,18 @@ namespace {
 
 // One corner winch per house corner. Positive power (see drive()) reels the
 // tether in (retrieve); negative pays it out.
-constexpr MotorController::MotorPins kFrontLeft{Config::kFrontLeftWinchA,
-                                                Config::kFrontLeftWinchB};
-constexpr MotorController::MotorPins kFrontRight{Config::kFrontRightWinchA,
-                                                 Config::kFrontRightWinchB};
-constexpr MotorController::MotorPins kRearLeft{Config::kRearLeftWinchA,
-                                               Config::kRearLeftWinchB};
-constexpr MotorController::MotorPins kRearRight{Config::kRearRightWinchA,
-                                                Config::kRearRightWinchB};
+constexpr MotorController::MotorPins kFrontLeft{
+    Config::kFrontLeftWinchA, Config::kFrontLeftWinchB,
+    Config::kFrontLeftInverted};
+constexpr MotorController::MotorPins kFrontRight{
+    Config::kFrontRightWinchA, Config::kFrontRightWinchB,
+    Config::kFrontRightInverted};
+constexpr MotorController::MotorPins kRearLeft{
+    Config::kRearLeftWinchA, Config::kRearLeftWinchB,
+    Config::kRearLeftInverted};
+constexpr MotorController::MotorPins kRearRight{
+    Config::kRearRightWinchA, Config::kRearRightWinchB,
+    Config::kRearRightInverted};
 
 #if !TEST_MODE
 constexpr uint8_t kFrontLeftAChannel = 0;
@@ -139,6 +143,7 @@ bool parseMotion(const String& value, Motion& motion) {
 }
 
 void MotorController::begin() {
+  speedPercent_ = Config::kDefaultSpeedPercent;
 #if TEST_MODE
   Serial.println("[motors] TEST_MODE: GPIO outputs are not enabled");
 #else
@@ -155,12 +160,28 @@ void MotorController::begin() {
   stop();
 }
 
+void MotorController::recordCommandedPower(const MotorPins& motor,
+                                            int16_t powerPercent) {
+  if (&motor == &kFrontLeft) {
+    frontLeftPower_ = powerPercent;
+  } else if (&motor == &kFrontRight) {
+    frontRightPower_ = powerPercent;
+  } else if (&motor == &kRearLeft) {
+    rearLeftPower_ = powerPercent;
+  } else if (&motor == &kRearRight) {
+    rearRightPower_ = powerPercent;
+  }
+}
+
 void MotorController::drive(const MotorPins& motor, int16_t powerPercent) {
+  // Polarity is applied here, once, so a reversed motor is fixed by editing
+  // Config::k*Inverted rather than the movement or joystick math.
+  if (motor.inverted) powerPercent = static_cast<int16_t>(-powerPercent);
+  powerPercent = constrain(powerPercent, -100, 100);
+  recordCommandedPower(motor, powerPercent);
 #if TEST_MODE
   (void)motor;
-  (void)powerPercent;
 #else
-  powerPercent = constrain(powerPercent, -100, 100);
   const uint32_t maxDuty = (1UL << Config::kMotorPwmResolutionBits) - 1;
   const uint32_t duty =
       static_cast<uint32_t>(abs(powerPercent)) * maxDuty / 100;
@@ -187,82 +208,85 @@ void MotorController::apply(Motion motion) {
   joystickX_ = 0;
   joystickY_ = 0;
 
-  // Every motion is a retrieve/payout mix across the four corner tethers.
-  // Retrieving a corner pulls the house toward that corner's anchor; the
-  // opposing corner(s) must pay out at the same time or the tethers fight
-  // each other.
+  // Every motion drives at the current commanded speed (see setSpeedPercent),
+  // which defaults low and is capped by Config::kMaxSpeedPercent for initial
+  // bench testing. Every motion is a retrieve/payout mix across the four
+  // corner tethers: retrieving a corner pulls the house toward that corner's
+  // anchor, and the opposing corner(s) must pay out at the same time or the
+  // tethers fight each other.
+  const int16_t p = speedPercent_;
   switch (motion) {
     case Motion::Forward:
-      drive(kFrontLeft, 100);
-      drive(kFrontRight, 100);
-      drive(kRearLeft, -100);
-      drive(kRearRight, -100);
+      drive(kFrontLeft, p);
+      drive(kFrontRight, p);
+      drive(kRearLeft, -p);
+      drive(kRearRight, -p);
       break;
     case Motion::Reverse:
-      drive(kFrontLeft, -100);
-      drive(kFrontRight, -100);
-      drive(kRearLeft, 100);
-      drive(kRearRight, 100);
+      drive(kFrontLeft, -p);
+      drive(kFrontRight, -p);
+      drive(kRearLeft, p);
+      drive(kRearRight, p);
       break;
     case Motion::Left:
-      drive(kFrontLeft, 100);
-      drive(kRearLeft, 100);
-      drive(kFrontRight, -100);
-      drive(kRearRight, -100);
+      drive(kFrontLeft, p);
+      drive(kRearLeft, p);
+      drive(kFrontRight, -p);
+      drive(kRearRight, -p);
       break;
     case Motion::Right:
-      drive(kFrontRight, 100);
-      drive(kRearRight, 100);
-      drive(kFrontLeft, -100);
-      drive(kRearLeft, -100);
+      drive(kFrontRight, p);
+      drive(kRearRight, p);
+      drive(kFrontLeft, -p);
+      drive(kRearLeft, -p);
       break;
     case Motion::RotateLeft:
-      drive(kFrontRight, 100);
-      drive(kRearLeft, 100);
-      drive(kFrontLeft, -100);
-      drive(kRearRight, -100);
+      drive(kFrontRight, p);
+      drive(kRearLeft, p);
+      drive(kFrontLeft, -p);
+      drive(kRearRight, -p);
       break;
     case Motion::RotateRight:
-      drive(kFrontLeft, 100);
-      drive(kRearRight, 100);
-      drive(kFrontRight, -100);
-      drive(kRearLeft, -100);
+      drive(kFrontLeft, p);
+      drive(kRearRight, p);
+      drive(kFrontRight, -p);
+      drive(kRearLeft, -p);
       break;
     case Motion::AllPayout:
-      drive(kFrontLeft, -Config::kWinchPowerPercent);
-      drive(kFrontRight, -Config::kWinchPowerPercent);
-      drive(kRearLeft, -Config::kWinchPowerPercent);
-      drive(kRearRight, -Config::kWinchPowerPercent);
+      drive(kFrontLeft, -p);
+      drive(kFrontRight, -p);
+      drive(kRearLeft, -p);
+      drive(kRearRight, -p);
       break;
     case Motion::AllRetrieve:
-      drive(kFrontLeft, Config::kWinchPowerPercent);
-      drive(kFrontRight, Config::kWinchPowerPercent);
-      drive(kRearLeft, Config::kWinchPowerPercent);
-      drive(kRearRight, Config::kWinchPowerPercent);
+      drive(kFrontLeft, p);
+      drive(kFrontRight, p);
+      drive(kRearLeft, p);
+      drive(kRearRight, p);
       break;
     case Motion::FrontLeftPayout:
-      drive(kFrontLeft, -Config::kWinchPowerPercent);
+      drive(kFrontLeft, -p);
       break;
     case Motion::FrontLeftRetrieve:
-      drive(kFrontLeft, Config::kWinchPowerPercent);
+      drive(kFrontLeft, p);
       break;
     case Motion::FrontRightPayout:
-      drive(kFrontRight, -Config::kWinchPowerPercent);
+      drive(kFrontRight, -p);
       break;
     case Motion::FrontRightRetrieve:
-      drive(kFrontRight, Config::kWinchPowerPercent);
+      drive(kFrontRight, p);
       break;
     case Motion::RearLeftPayout:
-      drive(kRearLeft, -Config::kWinchPowerPercent);
+      drive(kRearLeft, -p);
       break;
     case Motion::RearLeftRetrieve:
-      drive(kRearLeft, Config::kWinchPowerPercent);
+      drive(kRearLeft, p);
       break;
     case Motion::RearRightPayout:
-      drive(kRearRight, -Config::kWinchPowerPercent);
+      drive(kRearRight, -p);
       break;
     case Motion::RearRightRetrieve:
-      drive(kRearRight, Config::kWinchPowerPercent);
+      drive(kRearRight, p);
       break;
     case Motion::Stopped:
     case Motion::Joystick:
@@ -318,6 +342,13 @@ void MotorController::applyJoystick(int8_t xPercent, int8_t yPercent) {
     rearRight = rearRight * 100 / peak;
   }
 
+  // Scale the normalised -100..100 mix down to the current commanded speed.
+  const float speedScale = static_cast<float>(speedPercent_) / 100.0f;
+  frontLeft = static_cast<int16_t>(lroundf(frontLeft * speedScale));
+  frontRight = static_cast<int16_t>(lroundf(frontRight * speedScale));
+  rearLeft = static_cast<int16_t>(lroundf(rearLeft * speedScale));
+  rearRight = static_cast<int16_t>(lroundf(rearRight * speedScale));
+
   // Briefly stop every H-bridge input before applying a changed mix.
   stopAllChannels();
   drive(kFrontLeft, frontLeft);
@@ -346,6 +377,29 @@ Motion MotorController::motion() const { return motion_; }
 int8_t MotorController::joystickX() const { return joystickX_; }
 
 int8_t MotorController::joystickY() const { return joystickY_; }
+
+void MotorController::setSpeedPercent(uint8_t percent) {
+  speedPercent_ = static_cast<uint8_t>(
+      constrain(percent, Config::kMinSpeedPercent, Config::kMaxSpeedPercent));
+}
+
+uint8_t MotorController::speedPercent() const { return speedPercent_; }
+
+int8_t MotorController::frontLeftPowerPercent() const {
+  return static_cast<int8_t>(frontLeftPower_);
+}
+
+int8_t MotorController::frontRightPowerPercent() const {
+  return static_cast<int8_t>(frontRightPower_);
+}
+
+int8_t MotorController::rearLeftPowerPercent() const {
+  return static_cast<int8_t>(rearLeftPower_);
+}
+
+int8_t MotorController::rearRightPowerPercent() const {
+  return static_cast<int8_t>(rearRightPower_);
+}
 
 void MotorController::logMotion(Motion motion) const {
   Serial.printf("[motors] %s%s\n", motionName(motion),

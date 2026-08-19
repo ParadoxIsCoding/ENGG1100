@@ -7,14 +7,17 @@
 
 namespace {
 
-constexpr uint8_t kWhoAmIRegister = 0x0D;
-constexpr uint8_t kExpectedWhoAmI = 0x2A;
-constexpr uint8_t kOutXMsbRegister = 0x01;
-constexpr uint8_t kXyzDataConfigRegister = 0x0E;
-constexpr uint8_t kCtrlReg1 = 0x2A;
-constexpr uint8_t kCtrlReg2 = 0x2B;
-constexpr uint8_t kCtrlReg1Active100Hz = 0x19;
-constexpr uint8_t kCandidateAddresses[] = {0x1D, 0x1C};
+// MPU6050 register map (RA_WHO_AM_I, RA_PWR_MGMT_1, RA_ACCEL_CONFIG,
+// RA_ACCEL_XOUT_H). AD0 low (or floating, as wired here) gives 0x68; AD0
+// high gives 0x69, tried as a fallback in case a board's AD0 is strapped.
+constexpr uint8_t kWhoAmIRegister = 0x75;
+constexpr uint8_t kExpectedWhoAmI = 0x68;
+constexpr uint8_t kPwrMgmt1Register = 0x6B;
+constexpr uint8_t kAccelConfigRegister = 0x1C;
+constexpr uint8_t kAccelXoutHighRegister = 0x3B;
+constexpr uint8_t kCandidateAddresses[] = {0x68, 0x69};
+// LSB/g at the +-2g full-scale range selected in connectSensor().
+constexpr float kAccelSensitivityLsbPerG = 16384.0f;
 constexpr uint32_t kReadIntervalMs = 10;
 constexpr uint32_t kReconnectIntervalMs = 1000;
 constexpr float kLowPassAlpha = 0.35f;
@@ -34,6 +37,12 @@ bool deadlineReached(uint32_t now, uint32_t deadline) {
 }  // namespace
 
 void AttitudeSensor::begin() {
+  if (!Config::kAttitudeSensorEnabled) {
+    connected_ = false;
+    Serial.println("[attitude] MPU6050 disabled in Config");
+    return;
+  }
+
   Wire.begin(Config::kI2cSda, Config::kI2cScl);
   Wire.setClock(400000);
   connected_ = connectSensor();
@@ -42,21 +51,22 @@ void AttitudeSensor::begin() {
 
   if (!connected_) {
 #if TEST_MODE
-    Serial.println("[attitude] MMA8452Q not found; using test-mode demo");
+    Serial.println("[attitude] MPU6050 not found; using test-mode demo");
 #else
-    Serial.println("[attitude] ERROR: MMA8452Q not found at 0x1C or 0x1D");
+    Serial.println("[attitude] ERROR: MPU6050 not found at 0x68 or 0x69");
 #endif
   }
 }
 
 void AttitudeSensor::update() {
+  if (!Config::kAttitudeSensorEnabled) return;
   const uint32_t now = millis();
   if (!connected_) {
     if (now - lastProbeMs_ >= kReconnectIntervalMs) {
       lastProbeMs_ = now;
       connected_ = connectSensor();
       if (connected_) {
-        Serial.printf("[attitude] MMA8452Q reconnected at 0x%02X\n", address_);
+        Serial.printf("[attitude] MPU6050 reconnected at 0x%02X\n", address_);
       }
     }
 #if TEST_MODE
@@ -81,7 +91,7 @@ void AttitudeSensor::update() {
       connected_ = false;
       filterInitialised_ = false;
       lastProbeMs_ = now;
-      Serial.println("[attitude] ERROR: MMA8452Q stopped responding");
+      Serial.println("[attitude] ERROR: MPU6050 stopped responding");
     }
     return;
   }
@@ -169,19 +179,17 @@ bool AttitudeSensor::connectSensor() {
       continue;
     }
 
-    uint8_t ctrl1 = 0;
-    if (!readRegister(kCtrlReg1, ctrl1) ||
-        !writeRegister(kCtrlReg1, ctrl1 & ~0x01) ||
-        !writeRegister(kXyzDataConfigRegister, 0x00) ||
-        !writeRegister(kCtrlReg2, 0x02) ||
-        !writeRegister(kCtrlReg1, kCtrlReg1Active100Hz)) {
+    // Clear the sleep bit to wake the sensor, then select the +-2g
+    // accelerometer full-scale range.
+    if (!writeRegister(kPwrMgmt1Register, 0x00) ||
+        !writeRegister(kAccelConfigRegister, 0x00)) {
       continue;
     }
 
     filterInitialised_ = false;
     consecutiveReadFailures_ = 0;
     lastReadMs_ = 0;
-    Serial.printf("[attitude] MMA8452Q connected at 0x%02X\n", address_);
+    Serial.printf("[attitude] MPU6050 connected at 0x%02X\n", address_);
     return true;
   }
   address_ = 0;
@@ -210,29 +218,23 @@ bool AttitudeSensor::writeRegister(uint8_t reg, uint8_t value) {
 
 bool AttitudeSensor::readAcceleration(float& xG, float& yG, float& zG) {
   Wire.beginTransmission(address_);
-  Wire.write(kOutXMsbRegister);
+  Wire.write(kAccelXoutHighRegister);
   if (Wire.endTransmission(false) != 0 ||
       Wire.requestFrom(static_cast<int>(address_), 6) != 6) {
     return false;
   }
 
-  // The output is left-aligned signed 12-bit two's-complement. Convert to a
-  // signed 16-bit value before shifting so negative acceleration is preserved.
+  // MPU6050 accelerometer output is a full signed 16-bit value (no shift
+  // needed, unlike a 12-bit-in-16 part).
   const int16_t rawX = static_cast<int16_t>(
-                           (static_cast<uint16_t>(Wire.read()) << 8) |
-                           Wire.read()) >>
-                       4;
+      (static_cast<uint16_t>(Wire.read()) << 8) | Wire.read());
   const int16_t rawY = static_cast<int16_t>(
-                           (static_cast<uint16_t>(Wire.read()) << 8) |
-                           Wire.read()) >>
-                       4;
+      (static_cast<uint16_t>(Wire.read()) << 8) | Wire.read());
   const int16_t rawZ = static_cast<int16_t>(
-                           (static_cast<uint16_t>(Wire.read()) << 8) |
-                           Wire.read()) >>
-                       4;
-  xG = static_cast<float>(rawX) / 1024.0f;
-  yG = static_cast<float>(rawY) / 1024.0f;
-  zG = static_cast<float>(rawZ) / 1024.0f;
+      (static_cast<uint16_t>(Wire.read()) << 8) | Wire.read());
+  xG = static_cast<float>(rawX) / kAccelSensitivityLsbPerG;
+  yG = static_cast<float>(rawY) / kAccelSensitivityLsbPerG;
+  zG = static_cast<float>(rawZ) / kAccelSensitivityLsbPerG;
   return true;
 }
 

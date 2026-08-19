@@ -13,6 +13,7 @@
                 "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/WebServer/src",
                 "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/FS/src",
                 "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/WiFi/src",
+                "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/Wire/src",
                 "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/newlib/platform_include",
                 "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/freertos/include",
                 "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/freertos/include/esp_additions/freertos",
@@ -238,7 +239,6 @@
                 "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/Update/src",
                 "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/WiFiClientSecure/src",
                 "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/WiFiProv/src",
-                "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/Wire/src",
                 ""
             ],
             "browse": {
@@ -249,6 +249,7 @@
                     "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/WebServer/src",
                     "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/FS/src",
                     "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/WiFi/src",
+                    "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/Wire/src",
                     "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/newlib/platform_include",
                     "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/freertos/include",
                     "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/freertos/include/esp_additions/freertos",
@@ -474,7 +475,6 @@
                     "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/Update/src",
                     "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/WiFiClientSecure/src",
                     "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/WiFiProv/src",
-                    "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/Wire/src",
                     ""
                 ]
             },
