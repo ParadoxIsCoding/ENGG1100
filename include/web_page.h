@@ -16,7 +16,7 @@ const char kControlPage[] PROGMEM = R"HTML(
       --text: #fff; --muted: #8a8a8a; --dim: #555;
       --red: #ef3b3b; --red-strong: #ff2d2d; --red-deep: #7a1414; --red-wash: #1a0a0a;
     }
-    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
     html,body { overscroll-behavior: none; }
     body { margin: 0; min-height: 100dvh; background: var(--bg); color: var(--text); touch-action: manipulation; }
     main { width: min(100%, 30rem); margin: auto; padding: max(.6rem,env(safe-area-inset-top)) .75rem calc(6.7rem + env(safe-area-inset-bottom)); }
@@ -57,7 +57,7 @@ const char kControlPage[] PROGMEM = R"HTML(
     .tab.selected { background: var(--red); color: #fff; }
     .control-view { margin-top: .65rem; }
     .controls { display: flex; flex-direction: column; align-items: center; gap: .6rem; }
-    button { min-height: 3.65rem; border: 1px solid var(--border); border-radius: .8rem; background: var(--panel-alt); color: inherit; font: inherit; font-weight: 750; touch-action: none; user-select: none; }
+    button { min-height: 3.65rem; border: 1px solid var(--border); border-radius: .8rem; background: var(--panel-alt); color: inherit; font: inherit; font-weight: 750; touch-action: manipulation; user-select: none; }
     button:active,.active { background: var(--red); border-color: var(--red); transform: scale(.98); }
     button:focus-visible { outline: 3px solid var(--red); outline-offset: 2px; }
     .joystick { position: relative; width: min(58vw,14.5rem); aspect-ratio: 1; border: 2px solid var(--border); border-radius: 50%; background: radial-gradient(circle at center,#1a1a1a 0 11%,#111 12% 54%,#0a0a0a 55%); box-shadow: inset 0 0 0 1px #000,0 .5rem 1.2rem #00000066; touch-action: none; user-select: none; cursor: grab; }
@@ -145,8 +145,8 @@ const char kControlPage[] PROGMEM = R"HTML(
   <section class="panel" aria-label="Telemetry and motor status">
     <div class="speed-row">
       <label for="speed">SPEED</label>
-      <input type="range" id="speed" min="0" max="100" value="20" aria-label="Motor speed percent, capped at the configured maximum">
-      <strong id="speed-value">20%</strong>
+      <input type="range" id="speed" min="20" max="100" value="80" aria-label="Motor speed percent, capped at the configured maximum">
+      <strong id="speed-value">80%</strong>
     </div>
     <div class="stat-grid">
       <div class="stat"><span>UPTIME</span><strong id="uptime">0s</strong></div>
@@ -539,20 +539,47 @@ const char kControlPage[] PROGMEM = R"HTML(
   }
 
   function bindHold(selector, buildRequest) {
+    // Buttons use touch-action: manipulation (not none) so a swipe that
+    // starts on one can still scroll the page instead of being trapped by
+    // it. That means a scroll swipe's pointerdown looks identical to a hold
+    // at first contact, so committing to a motor command is delayed briefly
+    // and cancelled if the touch moves — a real hold sits still, a scroll
+    // swipe doesn't.
+    const armDelayMs = 90;
+    const moveCancelPx = 10;
     document.querySelectorAll(selector).forEach(button => {
       const send = () => post(...buildRequest(button));
+      let armTimer = null;
+      let startX = 0;
+      let startY = 0;
+      let confirmed = false;
+
+      const disarm = () => {
+        if (armTimer) clearTimeout(armTimer);
+        armTimer = null;
+        confirmed = false;
+      };
+
       button.addEventListener('pointerdown', event => {
-        event.preventDefault();
         endMotion();
-        heldMotion = true;
-        button.classList.add('active');
+        startX = event.clientX;
+        startY = event.clientY;
         button.setPointerCapture(event.pointerId);
-        send();
-        heartbeat = setInterval(send, 250);
+        armTimer = setTimeout(() => {
+          confirmed = true;
+          heldMotion = true;
+          button.classList.add('active');
+          send();
+          heartbeat = setInterval(send, 250);
+        }, armDelayMs);
       });
-      button.addEventListener('pointerup', endMotion);
-      button.addEventListener('pointercancel', endMotion);
-      button.addEventListener('lostpointercapture', endMotion);
+      button.addEventListener('pointermove', event => {
+        if (confirmed) return;
+        if (Math.hypot(event.clientX - startX, event.clientY - startY) > moveCancelPx) disarm();
+      });
+      button.addEventListener('pointerup', () => { disarm(); endMotion(); });
+      button.addEventListener('pointercancel', () => { disarm(); endMotion(); });
+      button.addEventListener('lostpointercapture', () => { disarm(); endMotion(); });
     });
   }
 

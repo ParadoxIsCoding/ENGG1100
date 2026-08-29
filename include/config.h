@@ -23,14 +23,11 @@ constexpr uint8_t kJoystickDeadZonePercent = 12;
 constexpr uint16_t kMotorPwmFrequencyHz = 20000;
 constexpr uint8_t kMotorPwmResolutionBits = 8;
 
-// First-power bench-test limits: an 8xAA pack with no fuse is powering the
-// L9110S boards. kDefaultSpeedPercent is what every command starts at;
-// kMaxSpeedPercent is the current ceiling for the /api/speed control. Raise
-// kMaxSpeedPercent only after current draw and mechanical behaviour have
-// been checked under load.
-constexpr uint8_t kMinSpeedPercent = 5;
-constexpr uint8_t kDefaultSpeedPercent = 20;
-constexpr uint8_t kMaxSpeedPercent = 35;
+// kDefaultSpeedPercent is what every command starts at; kMinSpeedPercent /
+// kMaxSpeedPercent bound the /api/speed control's range.
+constexpr uint8_t kMinSpeedPercent = 20;
+constexpr uint8_t kDefaultSpeedPercent = 80;
+constexpr uint8_t kMaxSpeedPercent = 100;
 
 // Fixed, deliberately gentle speed used only by the calibration tab's
 // hold-to-spin test. Independent of the drive speed slider so identifying a
