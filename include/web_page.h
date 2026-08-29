@@ -95,6 +95,9 @@ const char kControlPage[] PROGMEM = R"HTML(
     .motor-card.motor-in strong, .motor-card.motor-out strong { color: var(--red); }
     .motor-card.motor-stopped strong { color: var(--muted); }
     .cal-hint { margin: 0 0 .6rem; padding: .55rem .6rem; border: 1px solid var(--border); border-radius: .7rem; background: var(--panel-alt); color: var(--muted); font-size: .78rem; line-height: 1.35; }
+    .cal-active { display: flex; align-items: center; gap: .5rem; margin: 0 0 .6rem; padding: .5rem .6rem; border: 1px solid var(--border); border-radius: .7rem; background: var(--panel); }
+    .cal-active span { flex: none; color: var(--muted); font-size: .64rem; font-weight: 750; letter-spacing: .08em; }
+    .cal-active strong { min-width: 0; overflow-x: auto; white-space: nowrap; font-size: .8rem; font-variant-numeric: tabular-nums; }
     .cal-slots { display: flex; flex-direction: column; gap: .6rem; }
     .cal-slot { padding: .55rem; border: 1px solid var(--border); border-radius: .8rem; background: var(--panel); }
     .cal-slot.spinning { border-color: var(--red); }
@@ -201,6 +204,10 @@ const char kControlPage[] PROGMEM = R"HTML(
 
   <section class="control-view" id="calibration-controls" aria-label="Motor identification and calibration" hidden>
     <p class="cal-hint">Hold OUT or IN on one motor at a time and watch which corner physically moves. Tap that corner below to label it, flip INVERT if it spins the wrong way, then SAVE once all four are labelled. Nothing changes until you press SAVE.</p>
+    <div class="cal-active" aria-label="Currently active motor calibration">
+      <span>ACTIVE</span>
+      <strong id="cal-active-summary">—</strong>
+    </div>
     <div class="cal-slots">
       <div class="cal-slot" id="cal-slot-0" data-cal-slot-card="0">
         <div class="cal-slot-head"><span>MOTOR 1</span><span class="cal-slot-status" data-cal-status="0"></span></div>
@@ -310,6 +317,30 @@ const char kControlPage[] PROGMEM = R"HTML(
   const calCorner = [null, null, null, null]; // per motor slot; null = not yet labelled
   const calInverted = [false, false, false, false];
   let calSyncedFromServer = false;
+  let audioCtx = null;
+
+  // Confirms a press without needing to look at the screen. navigator.vibrate
+  // is unsupported on iOS Safari (Apple has never implemented the Vibration
+  // API there), so a very short, quiet click is also played through Web
+  // Audio — that part works everywhere, including iPhones. Must be called
+  // from inside a user-gesture handler (click/pointerdown) for the audio to
+  // be allowed to play.
+  function buzz(strong = false) {
+    try { navigator.vibrate && navigator.vibrate(strong ? [18, 40, 18] : 12); } catch (error) { /* no-op */ }
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const duration = strong ? .13 : .05;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.frequency.value = strong ? 880 : 660;
+      gain.gain.setValueAtTime(strong ? .14 : .05, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(.0001, audioCtx.currentTime + duration);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + duration);
+    } catch (error) { /* no-op */ }
+  }
 
   // Distinguishes "server responded with an error" (show its message) from
   // a network failure (show the generic disconnected state).
@@ -405,14 +436,23 @@ const char kControlPage[] PROGMEM = R"HTML(
     updateCalUi();
   }
 
+  const cornerAbbrev = {'front-left': 'FL', 'front-right': 'FR', 'rear-left': 'RL', 'rear-right': 'RR'};
+
   function renderCalibration(data) {
-    if (Array.isArray(data.calibration) && !calSyncedFromServer) {
-      data.calibration.forEach((slot, index) => {
-        calCorner[index] = slot.corner;
-        calInverted[index] = !!slot.inverted;
-      });
-      calSyncedFromServer = true;
-      updateCalUi();
+    if (Array.isArray(data.calibration)) {
+      if (!calSyncedFromServer) {
+        data.calibration.forEach((slot, index) => {
+          calCorner[index] = slot.corner;
+          calInverted[index] = !!slot.inverted;
+        });
+        calSyncedFromServer = true;
+        updateCalUi();
+      }
+      // Reflects what's actually active on the controller right now, not
+      // the (possibly still unsaved) picks being made below.
+      document.querySelector('#cal-active-summary').textContent = data.calibration
+        .map((slot, index) => `M${index + 1}→${cornerAbbrev[slot.corner] || '?'}${slot.inverted ? ' (INV)' : ''}`)
+        .join('  ');
     }
     const spinningSlot = Number.isInteger(data.calibrationSlot) ? data.calibrationSlot : -1;
     for (let slot = 0; slot < 4; slot++) {
@@ -569,6 +609,7 @@ const char kControlPage[] PROGMEM = R"HTML(
           confirmed = true;
           heldMotion = true;
           button.classList.add('active');
+          buzz();
           send();
           heartbeat = setInterval(send, 250);
         }, armDelayMs);
@@ -588,6 +629,7 @@ const char kControlPage[] PROGMEM = R"HTML(
 
   document.querySelectorAll('[data-tab]').forEach(tab => {
     tab.addEventListener('click', () => {
+      buzz();
       endMotion();
       const selected = tab.dataset.tab;
       document.querySelector('#drive-controls').hidden = selected !== 'drive';
@@ -604,19 +646,21 @@ const char kControlPage[] PROGMEM = R"HTML(
   document.querySelectorAll('[data-cal-corner-group]').forEach(group => {
     const slot = Number(group.dataset.calCornerGroup);
     group.querySelectorAll('[data-corner]').forEach(button => {
-      button.addEventListener('click', () => setCalCorner(slot, button.dataset.corner));
+      button.addEventListener('click', () => { buzz(); setCalCorner(slot, button.dataset.corner); });
     });
   });
 
   document.querySelectorAll('[data-cal-invert]').forEach(button => {
     const slot = Number(button.dataset.calInvert);
     button.addEventListener('click', () => {
+      buzz();
       calInverted[slot] = !calInverted[slot];
       updateCalUi();
     });
   });
 
   document.querySelector('#cal-save').addEventListener('click', async () => {
+    buzz();
     const message = document.querySelector('#cal-message');
     if (calCorner.some(corner => corner === null)) {
       message.textContent = 'Label all four motors before saving.';
@@ -633,6 +677,7 @@ const char kControlPage[] PROGMEM = R"HTML(
   });
 
   document.querySelector('#cal-reset').addEventListener('click', async () => {
+    buzz();
     const message = document.querySelector('#cal-message');
     calSyncedFromServer = false;
     const ok = await post('/api/calibration/reset');
@@ -642,6 +687,7 @@ const char kControlPage[] PROGMEM = R"HTML(
   joystick.addEventListener('pointerdown', event => {
     if (joystickPointer !== null) return;
     event.preventDefault();
+    buzz();
     endMotion();
     joystickPointer = event.pointerId;
     joystick.classList.add('active');
@@ -660,10 +706,10 @@ const char kControlPage[] PROGMEM = R"HTML(
   joystick.addEventListener('pointercancel', endMotion);
   joystick.addEventListener('lostpointercapture', endMotion);
 
-  document.querySelector('#stop').addEventListener('click', () => { endMotion(false); post('/api/stop'); });
-  document.querySelector('#estop').addEventListener('click', () => { endMotion(false); post('/api/estop'); });
-  reset.addEventListener('click', () => post('/api/estop/clear'));
-  document.querySelector('#set-level').addEventListener('click', () => post('/api/attitude/level'));
+  document.querySelector('#stop').addEventListener('click', () => { buzz(); endMotion(false); post('/api/stop'); });
+  document.querySelector('#estop').addEventListener('click', () => { buzz(true); endMotion(false); post('/api/estop'); });
+  reset.addEventListener('click', () => { buzz(); post('/api/estop/clear'); });
+  document.querySelector('#set-level').addEventListener('click', () => { buzz(); post('/api/attitude/level'); });
   speedInput.addEventListener('pointerdown', () => { speedDragging = true; });
   speedInput.addEventListener('input', () => { speedValue.textContent = `${speedInput.value}%`; });
   speedInput.addEventListener('change', () => {

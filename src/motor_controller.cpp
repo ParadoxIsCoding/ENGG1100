@@ -33,6 +33,11 @@ constexpr MotorController::SlotCalibration kDefaultSlotCalibration
 constexpr char kPrefsNamespace[] = "motorcal";
 constexpr char kPrefsKey[] = "slots";
 
+// Separate namespace for user-adjustable settings (currently just drive
+// speed) that persist across reboots, distinct from the slot calibration.
+constexpr char kSettingsNamespace[] = "settings";
+constexpr char kSpeedKey[] = "speed";
+
 #if !TEST_MODE
 constexpr uint8_t kSlotAChannel[MotorController::kSlotCount] = {0, 2, 4, 6};
 constexpr uint8_t kSlotBChannel[MotorController::kSlotCount] = {1, 3, 5, 7};
@@ -172,6 +177,7 @@ void MotorController::begin() {
   speedPercent_ = Config::kDefaultSpeedPercent;
   for (uint8_t i = 0; i < kSlotCount; ++i) slots_[i] = kDefaultSlotCalibration[i];
   loadCalibrationFromStorage();
+  loadSpeedFromStorage();
 #if TEST_MODE
   Serial.println("[motors] TEST_MODE: GPIO outputs are not enabled");
 #else
@@ -514,6 +520,29 @@ void MotorController::persistCalibration() const {
   prefs.end();
 }
 
+void MotorController::loadSpeedFromStorage() {
+  Preferences prefs;
+  if (!prefs.begin(kSettingsNamespace, /*readOnly=*/true)) return;
+  if (prefs.isKey(kSpeedKey)) {
+    const uint8_t saved = prefs.getUChar(kSpeedKey, speedPercent_);
+    if (saved >= Config::kMinSpeedPercent && saved <= Config::kMaxSpeedPercent) {
+      speedPercent_ = saved;
+      Serial.printf("[motors] loaded saved speed from flash: %u%%\n", saved);
+    }
+  }
+  prefs.end();
+}
+
+void MotorController::persistSpeed() const {
+  Preferences prefs;
+  if (!prefs.begin(kSettingsNamespace, /*readOnly=*/false)) {
+    Serial.println("[motors] failed to open flash storage to save speed");
+    return;
+  }
+  prefs.putUChar(kSpeedKey, speedPercent_);
+  prefs.end();
+}
+
 void MotorController::stop() { apply(Motion::Stopped); }
 
 Motion MotorController::motion() const { return motion_; }
@@ -523,8 +552,11 @@ int8_t MotorController::joystickX() const { return joystickX_; }
 int8_t MotorController::joystickY() const { return joystickY_; }
 
 void MotorController::setSpeedPercent(uint8_t percent) {
-  speedPercent_ = static_cast<uint8_t>(
+  const uint8_t clamped = static_cast<uint8_t>(
       constrain(percent, Config::kMinSpeedPercent, Config::kMaxSpeedPercent));
+  if (clamped == speedPercent_) return;
+  speedPercent_ = clamped;
+  persistSpeed();
 }
 
 uint8_t MotorController::speedPercent() const { return speedPercent_; }

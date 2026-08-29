@@ -89,6 +89,8 @@ class MotorController {
   int8_t slotIndexForCorner(Corner corner) const;
   void loadCalibrationFromStorage();
   void persistCalibration() const;
+  void loadSpeedFromStorage();
+  void persistSpeed() const;
 
   Motion motion_ = Motion::Stopped;
   int8_t joystickX_ = 0;
