@@ -16,7 +16,7 @@ const char kControlPage[] PROGMEM = R"HTML(
       --text: #fff; --muted: #8a8a8a; --dim: #555;
       --red: #ef3b3b; --red-strong: #ff2d2d; --red-deep: #7a1414; --red-wash: #1a0a0a;
     }
-    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
     html,body { overscroll-behavior: none; }
     body { margin: 0; min-height: 100dvh; background: var(--bg); color: var(--text); touch-action: manipulation; }
     main { width: min(100%, 30rem); margin: auto; padding: max(.6rem,env(safe-area-inset-top)) .75rem calc(6.7rem + env(safe-area-inset-bottom)); }
