@@ -1,6 +1,6 @@
 # ENGG1100 Station Keeper
 
-Station Keeper is an offline iPhone controller for Team Lavender's floating evacuation-centre prototype. A standard ESP32 (ESP32-D0WD-V3 DevKit, `esp32dev`) creates its own Wi-Fi network, drives four corner tether winches, and reads a GY-521 (MPU6050) tilt sensor. The phone interface provides proportional drive, manual per-corner tether payout/retrieval, a motor speed control, four motor-status cards, pitch and roll, a display-only vertical-motion estimate, and latched emergency stop. The project will later move to an ESP32-S3 N16R8; the `esp32-s3-*` environments exist for that but are not physically wired yet.
+Station Keeper is an offline iPhone controller for Team Lavender's floating evacuation-centre prototype. A standard ESP32 (ESP32-D0WD-V3 DevKit, `esp32dev`) creates its own Wi-Fi network, drives four corner tether winches, and reads a GY-521 (MPU6050) tilt sensor. The phone interface provides proportional drive, manual per-corner tether payout/retrieval, a motor speed control, four motor-status cards, pitch and roll, a display-only vertical-motion estimate, a motor calibration tab, and latched emergency stop. The project will later move to an ESP32-S3 N16R8; the `esp32-s3-*` environments exist for that but are not physically wired yet.
 
 The prototype has no separate propulsion system. A 60 RPM N20 gear motor sits at each of the house's four corners, each with a 3D-printed pulley spooling fishing line to a fixed anchor point in that corner's direction. Reeling a corner's line in pulls the house that way; the opposing corner(s) must pay their line out at the same time, so all station-keeping and station-return movement comes from differentially driving the four winches — there are no poles or rigid channels, matching the project's dimensional constraints.
 
@@ -19,12 +19,14 @@ The MPU6050 can indicate short **RISING**, **FALLING**, and **STEADY** movements
 
 Use the GPIO numbers printed below, not a board vendor's `D` numbers. Each corner winch is one 60 RPM N20 gear motor with a 3D-printed pulley spooling fishing line to a fixed anchor point in that corner's direction. Two dual-channel L9110S boards drive all four corner winches; there is no separate propulsion motor set. Pin numbers below are for the standard ESP32 (`esp32-hardware`); see `include/config.h` for the placeholder ESP32-S3 map.
 
+The four rows below are labelled "Motor 1"–"Motor 4" rather than by corner on purpose: which corner each one actually drives, and whether it needs to spin inverted, is **not** set in firmware. Wire them in whatever order is physically convenient, then use the phone UI's **CALIBRATE** tab to spin each motor and tell the controller which corner it is — see "Motor calibration" below.
+
 | Device | Terminal | Standard ESP32 |
 |---|---|---:|
-| L9110S board 1 (front-left / rear-left), channel A | `A-IA`, `A-IB` | GPIO `13`, GPIO `14` |
-| L9110S board 1 (front-left / rear-left), channel B | `B-IA`, `B-IB` | GPIO `16`, GPIO `17` |
-| L9110S board 2 (front-right / rear-right), channel A | `A-IA`, `A-IB` | GPIO `18`, GPIO `19` |
-| L9110S board 2 (front-right / rear-right), channel B | `B-IA`, `B-IB` | GPIO `25`, GPIO `26` |
+| L9110S board 1, channel A (Motor 1) | `A-IA`, `A-IB` | GPIO `13`, GPIO `14` |
+| L9110S board 1, channel B (Motor 2) | `B-IA`, `B-IB` | GPIO `16`, GPIO `17` |
+| L9110S board 2, channel A (Motor 3) | `A-IA`, `A-IB` | GPIO `18`, GPIO `19` |
+| L9110S board 2, channel B (Motor 4) | `B-IA`, `B-IB` | GPIO `25`, GPIO `26` |
 | GY-521 (MPU6050) | `SDA`, `SCL` | GPIO `21`, GPIO `22` |
 | GY-521 (MPU6050) | `VCC`, `GND` | `3V3`, `GND` |
 | GY-521 (MPU6050) | `XDA`, `XCL`, `AD0`, `INT` | Not connected |
@@ -32,10 +34,10 @@ Use the GPIO numbers printed below, not a board vendor's `D` numbers. Each corne
 ```text
 STANDARD ESP32                    SIGNAL CONNECTIONS
 
-GPIO 13, 14  ------------------> L9110S #1 channel A (A-IA/A-IB) --> front-left winch motor
-GPIO 16, 17  ------------------> L9110S #1 channel B (B-IA/B-IB) --> rear-left winch motor
-GPIO 18, 19  ------------------> L9110S #2 channel A (A-IA/A-IB) --> front-right winch motor
-GPIO 25, 26  ------------------> L9110S #2 channel B (B-IA/B-IB) --> rear-right winch motor
+GPIO 13, 14  ------------------> L9110S #1 channel A (A-IA/A-IB) --> Motor 1
+GPIO 16, 17  ------------------> L9110S #1 channel B (B-IA/B-IB) --> Motor 2
+GPIO 18, 19  ------------------> L9110S #2 channel A (A-IA/A-IB) --> Motor 3
+GPIO 25, 26  ------------------> L9110S #2 channel B (B-IA/B-IB) --> Motor 4
 GPIO 21      ------------------> GY-521 SDA
 GPIO 22      ------------------> GY-521 SCL
 3V3          ------------------> GY-521 VCC
@@ -44,7 +46,18 @@ GND          ------------------> GY-521 GND
 
 Do not use GPIO 6-11 on the standard ESP32: they are tied to the module's internal flash interface.
 
-Connect each motor only to its driver's matching output pair (`A-OA/A-OB` or `B-OA/B-OB`). Motor polarity has not been physically verified yet. If a motor reels the wrong direction (pays out when it should retrieve, or vice versa), the fix is a one-line software change: flip that motor's `k*Inverted` flag in `include/config.h` — never rewire the GPIO input pair or edit the movement/joystick math. Fit a 10 kΩ pull-down resistor between every L9110S input and ground so the motors remain off while the ESP32 starts.
+Connect each motor only to its driver's matching output pair (`A-OA/A-OB` or `B-OA/B-OB`). Fit a 10 kΩ pull-down resistor between every L9110S input and ground so the motors remain off while the ESP32 starts.
+
+### Motor calibration
+
+Because Motor 1–4 above are just wiring positions, first power-up (or any time a winch gets re-plugged into a different driver channel) needs a short calibration pass from the phone, not a firmware change:
+
+1. Open the **CALIBRATE** tab.
+2. For each of the four motor cards, hold **OUT** or **IN** — it spins only that one physical motor, at a fixed gentle speed independent of the drive speed slider — and watch which corner of the prototype actually moves.
+3. Tap that corner's button (FL/FR/RL/RR) to label the motor. If it turned the wrong way (paid out on IN, or vice versa), tap **INVERT**.
+4. Repeat for all four motors, then press **SAVE CALIBRATION**. The mapping applies immediately and is written to the ESP32's flash (NVS), so it survives reboots and re-flashing until it's recalibrated. **RESET TO DEFAULT** restores Motor 1→front-left, Motor 2→rear-left, Motor 3→front-right, Motor 4→rear-right, none inverted.
+
+Calibration spins use the same hold-to-run/dead-man safety behaviour as every other motor control: releasing the button, losing the Wi-Fi connection, or hitting the emergency stop all stop it immediately.
 
 Mount the GY-521 rigidly above the water line, component side upward. Power it from **3.3 V only**. Do not connect it to 5 V or 12 V.
 

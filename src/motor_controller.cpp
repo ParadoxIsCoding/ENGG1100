@@ -2,34 +2,40 @@
 
 #include <math.h>
 
+#include <Preferences.h>
+
 #include "config.h"
 
 namespace {
 
-// One corner winch per house corner. Positive power (see drive()) reels the
-// tether in (retrieve); negative pays it out.
-constexpr MotorController::MotorPins kFrontLeft{
-    Config::kFrontLeftWinchA, Config::kFrontLeftWinchB,
-    Config::kFrontLeftInverted};
-constexpr MotorController::MotorPins kFrontRight{
-    Config::kFrontRightWinchA, Config::kFrontRightWinchB,
-    Config::kFrontRightInverted};
-constexpr MotorController::MotorPins kRearLeft{
-    Config::kRearLeftWinchA, Config::kRearLeftWinchB,
-    Config::kRearLeftInverted};
-constexpr MotorController::MotorPins kRearRight{
-    Config::kRearRightWinchA, Config::kRearRightWinchB,
-    Config::kRearRightInverted};
+// Physical wiring only. Which corner each slot drives, and its invert
+// flag, live in MotorController::slots_ (runtime, calibrated from the web
+// UI) rather than here.
+constexpr MotorController::MotorPins kSlotPins[MotorController::kSlotCount] = {
+    {Config::kMotor1PinA, Config::kMotor1PinB},
+    {Config::kMotor2PinA, Config::kMotor2PinB},
+    {Config::kMotor3PinA, Config::kMotor3PinB},
+    {Config::kMotor4PinA, Config::kMotor4PinB},
+};
+
+// Matches the wiring the project has always assumed: slot 1 = front-left,
+// slot 2 = rear-left, slot 3 = front-right, slot 4 = rear-right, none
+// inverted. Used until a saved calibration is found in flash, and restored
+// by MotorController::resetCalibration.
+constexpr MotorController::SlotCalibration kDefaultSlotCalibration
+    [MotorController::kSlotCount] = {
+        {Corner::FrontLeft, false},
+        {Corner::RearLeft, false},
+        {Corner::FrontRight, false},
+        {Corner::RearRight, false},
+};
+
+constexpr char kPrefsNamespace[] = "motorcal";
+constexpr char kPrefsKey[] = "slots";
 
 #if !TEST_MODE
-constexpr uint8_t kFrontLeftAChannel = 0;
-constexpr uint8_t kFrontLeftBChannel = 1;
-constexpr uint8_t kFrontRightAChannel = 2;
-constexpr uint8_t kFrontRightBChannel = 3;
-constexpr uint8_t kRearLeftAChannel = 4;
-constexpr uint8_t kRearLeftBChannel = 5;
-constexpr uint8_t kRearRightAChannel = 6;
-constexpr uint8_t kRearRightBChannel = 7;
+constexpr uint8_t kSlotAChannel[MotorController::kSlotCount] = {0, 2, 4, 6};
+constexpr uint8_t kSlotBChannel[MotorController::kSlotCount] = {1, 3, 5, 7};
 
 void prepareStoppedOutput(uint8_t pin) {
   // Set the output latch LOW before enabling the output driver.
@@ -43,17 +49,6 @@ void preparePwmOutput(uint8_t pin, uint8_t channel) {
             Config::kMotorPwmResolutionBits);
   ledcAttachPin(pin, channel);
   ledcWrite(channel, 0);
-}
-
-uint8_t channelForPin(uint8_t pin) {
-  if (pin == kFrontLeft.a) return kFrontLeftAChannel;
-  if (pin == kFrontLeft.b) return kFrontLeftBChannel;
-  if (pin == kFrontRight.a) return kFrontRightAChannel;
-  if (pin == kFrontRight.b) return kFrontRightBChannel;
-  if (pin == kRearLeft.a) return kRearLeftAChannel;
-  if (pin == kRearLeft.b) return kRearLeftBChannel;
-  if (pin == kRearRight.a) return kRearRightAChannel;
-  return kRearRightBChannel;
 }
 #endif
 
@@ -95,6 +90,8 @@ const char* motionName(Motion motion) {
       return "rear-right-retrieve";
     case Motion::Joystick:
       return "joystick";
+    case Motion::Calibration:
+      return "calibrating";
     case Motion::Stopped:
     default:
       return "stopped";
@@ -142,61 +139,106 @@ bool parseMotion(const String& value, Motion& motion) {
   return true;
 }
 
+const char* cornerName(Corner corner) {
+  switch (corner) {
+    case Corner::FrontLeft:
+      return "front-left";
+    case Corner::FrontRight:
+      return "front-right";
+    case Corner::RearLeft:
+      return "rear-left";
+    case Corner::RearRight:
+    default:
+      return "rear-right";
+  }
+}
+
+bool parseCorner(const String& value, Corner& corner) {
+  if (value == "front-left") {
+    corner = Corner::FrontLeft;
+  } else if (value == "front-right") {
+    corner = Corner::FrontRight;
+  } else if (value == "rear-left") {
+    corner = Corner::RearLeft;
+  } else if (value == "rear-right") {
+    corner = Corner::RearRight;
+  } else {
+    return false;
+  }
+  return true;
+}
+
 void MotorController::begin() {
   speedPercent_ = Config::kDefaultSpeedPercent;
+  for (uint8_t i = 0; i < kSlotCount; ++i) slots_[i] = kDefaultSlotCalibration[i];
+  loadCalibrationFromStorage();
 #if TEST_MODE
   Serial.println("[motors] TEST_MODE: GPIO outputs are not enabled");
 #else
-  preparePwmOutput(kFrontLeft.a, kFrontLeftAChannel);
-  preparePwmOutput(kFrontLeft.b, kFrontLeftBChannel);
-  preparePwmOutput(kFrontRight.a, kFrontRightAChannel);
-  preparePwmOutput(kFrontRight.b, kFrontRightBChannel);
-  preparePwmOutput(kRearLeft.a, kRearLeftAChannel);
-  preparePwmOutput(kRearLeft.b, kRearLeftBChannel);
-  preparePwmOutput(kRearRight.a, kRearRightAChannel);
-  preparePwmOutput(kRearRight.b, kRearRightBChannel);
+  for (uint8_t i = 0; i < kSlotCount; ++i) {
+    preparePwmOutput(kSlotPins[i].a, kSlotAChannel[i]);
+    preparePwmOutput(kSlotPins[i].b, kSlotBChannel[i]);
+  }
   Serial.println("[motors] Hardware GPIO enabled; all outputs LOW");
 #endif
   stop();
 }
 
-void MotorController::recordCommandedPower(const MotorPins& motor,
-                                            int16_t powerPercent) {
-  if (&motor == &kFrontLeft) {
-    frontLeftPower_ = powerPercent;
-  } else if (&motor == &kFrontRight) {
-    frontRightPower_ = powerPercent;
-  } else if (&motor == &kRearLeft) {
-    rearLeftPower_ = powerPercent;
-  } else if (&motor == &kRearRight) {
-    rearRightPower_ = powerPercent;
-  }
-}
-
-void MotorController::drive(const MotorPins& motor, int16_t powerPercent) {
-  // Polarity is applied here, once, so a reversed motor is fixed by editing
-  // Config::k*Inverted rather than the movement or joystick math.
-  if (motor.inverted) powerPercent = static_cast<int16_t>(-powerPercent);
+void MotorController::drive(uint8_t slot, int16_t powerPercent) {
+  // Polarity is applied here, once, from the calibrated invert flag, so a
+  // reversed motor is fixed from the calibration tab rather than the
+  // movement or joystick math.
+  if (slot >= kSlotCount) return;
+  if (slots_[slot].inverted) powerPercent = static_cast<int16_t>(-powerPercent);
   powerPercent = constrain(powerPercent, -100, 100);
-  recordCommandedPower(motor, powerPercent);
 #if TEST_MODE
-  (void)motor;
+  (void)powerPercent;
 #else
   const uint32_t maxDuty = (1UL << Config::kMotorPwmResolutionBits) - 1;
   const uint32_t duty =
       static_cast<uint32_t>(abs(powerPercent)) * maxDuty / 100;
-  ledcWrite(channelForPin(motor.a), powerPercent > 0 ? duty : 0);
-  ledcWrite(channelForPin(motor.b), powerPercent < 0 ? duty : 0);
+  ledcWrite(kSlotAChannel[slot], powerPercent > 0 ? duty : 0);
+  ledcWrite(kSlotBChannel[slot], powerPercent < 0 ? duty : 0);
 #endif
 }
 
+int8_t MotorController::slotIndexForCorner(Corner corner) const {
+  for (uint8_t i = 0; i < kSlotCount; ++i) {
+    if (slots_[i].corner == corner) return static_cast<int8_t>(i);
+  }
+  return -1;
+}
+
+void MotorController::driveCorner(Corner corner, int16_t powerPercent) {
+  powerPercent = constrain(powerPercent, static_cast<int16_t>(-100),
+                            static_cast<int16_t>(100));
+  switch (corner) {
+    case Corner::FrontLeft:
+      frontLeftPower_ = powerPercent;
+      break;
+    case Corner::FrontRight:
+      frontRightPower_ = powerPercent;
+      break;
+    case Corner::RearLeft:
+      rearLeftPower_ = powerPercent;
+      break;
+    case Corner::RearRight:
+      rearRightPower_ = powerPercent;
+      break;
+  }
+  const int8_t slot = slotIndexForCorner(corner);
+  if (slot >= 0) drive(static_cast<uint8_t>(slot), powerPercent);
+}
+
 void MotorController::stopAllChannels() {
-  // Stop all channels before changing direction to avoid shoot-through and
-  // sudden opposite-direction transitions.
-  drive(kFrontLeft, 0);
-  drive(kFrontRight, 0);
-  drive(kRearLeft, 0);
-  drive(kRearRight, 0);
+  // Stop every physical slot directly (not via the corner mapping) before
+  // changing direction, to avoid shoot-through and sudden opposite-direction
+  // transitions even if the mapping is mid-calibration.
+  for (uint8_t i = 0; i < kSlotCount; ++i) drive(i, 0);
+  frontLeftPower_ = 0;
+  frontRightPower_ = 0;
+  rearLeftPower_ = 0;
+  rearRightPower_ = 0;
 }
 
 void MotorController::apply(Motion motion) {
@@ -207,6 +249,7 @@ void MotorController::apply(Motion motion) {
   stopAllChannels();
   joystickX_ = 0;
   joystickY_ = 0;
+  calibrationSlot_ = -1;
 
   // Every motion drives at the current commanded speed (see setSpeedPercent),
   // which defaults low and is capped by Config::kMaxSpeedPercent for initial
@@ -217,79 +260,80 @@ void MotorController::apply(Motion motion) {
   const int16_t p = speedPercent_;
   switch (motion) {
     case Motion::Forward:
-      drive(kFrontLeft, p);
-      drive(kFrontRight, p);
-      drive(kRearLeft, -p);
-      drive(kRearRight, -p);
+      driveCorner(Corner::FrontLeft, p);
+      driveCorner(Corner::FrontRight, p);
+      driveCorner(Corner::RearLeft, -p);
+      driveCorner(Corner::RearRight, -p);
       break;
     case Motion::Reverse:
-      drive(kFrontLeft, -p);
-      drive(kFrontRight, -p);
-      drive(kRearLeft, p);
-      drive(kRearRight, p);
+      driveCorner(Corner::FrontLeft, -p);
+      driveCorner(Corner::FrontRight, -p);
+      driveCorner(Corner::RearLeft, p);
+      driveCorner(Corner::RearRight, p);
       break;
     case Motion::Left:
-      drive(kFrontLeft, p);
-      drive(kRearLeft, p);
-      drive(kFrontRight, -p);
-      drive(kRearRight, -p);
+      driveCorner(Corner::FrontLeft, p);
+      driveCorner(Corner::RearLeft, p);
+      driveCorner(Corner::FrontRight, -p);
+      driveCorner(Corner::RearRight, -p);
       break;
     case Motion::Right:
-      drive(kFrontRight, p);
-      drive(kRearRight, p);
-      drive(kFrontLeft, -p);
-      drive(kRearLeft, -p);
+      driveCorner(Corner::FrontRight, p);
+      driveCorner(Corner::RearRight, p);
+      driveCorner(Corner::FrontLeft, -p);
+      driveCorner(Corner::RearLeft, -p);
       break;
     case Motion::RotateLeft:
-      drive(kFrontRight, p);
-      drive(kRearLeft, p);
-      drive(kFrontLeft, -p);
-      drive(kRearRight, -p);
+      driveCorner(Corner::FrontRight, p);
+      driveCorner(Corner::RearLeft, p);
+      driveCorner(Corner::FrontLeft, -p);
+      driveCorner(Corner::RearRight, -p);
       break;
     case Motion::RotateRight:
-      drive(kFrontLeft, p);
-      drive(kRearRight, p);
-      drive(kFrontRight, -p);
-      drive(kRearLeft, -p);
+      driveCorner(Corner::FrontLeft, p);
+      driveCorner(Corner::RearRight, p);
+      driveCorner(Corner::FrontRight, -p);
+      driveCorner(Corner::RearLeft, -p);
       break;
     case Motion::AllPayout:
-      drive(kFrontLeft, -p);
-      drive(kFrontRight, -p);
-      drive(kRearLeft, -p);
-      drive(kRearRight, -p);
+      driveCorner(Corner::FrontLeft, -p);
+      driveCorner(Corner::FrontRight, -p);
+      driveCorner(Corner::RearLeft, -p);
+      driveCorner(Corner::RearRight, -p);
       break;
     case Motion::AllRetrieve:
-      drive(kFrontLeft, p);
-      drive(kFrontRight, p);
-      drive(kRearLeft, p);
-      drive(kRearRight, p);
+      driveCorner(Corner::FrontLeft, p);
+      driveCorner(Corner::FrontRight, p);
+      driveCorner(Corner::RearLeft, p);
+      driveCorner(Corner::RearRight, p);
       break;
     case Motion::FrontLeftPayout:
-      drive(kFrontLeft, -p);
+      driveCorner(Corner::FrontLeft, -p);
       break;
     case Motion::FrontLeftRetrieve:
-      drive(kFrontLeft, p);
+      driveCorner(Corner::FrontLeft, p);
       break;
     case Motion::FrontRightPayout:
-      drive(kFrontRight, -p);
+      driveCorner(Corner::FrontRight, -p);
       break;
     case Motion::FrontRightRetrieve:
-      drive(kFrontRight, p);
+      driveCorner(Corner::FrontRight, p);
       break;
     case Motion::RearLeftPayout:
-      drive(kRearLeft, -p);
+      driveCorner(Corner::RearLeft, -p);
       break;
     case Motion::RearLeftRetrieve:
-      drive(kRearLeft, p);
+      driveCorner(Corner::RearLeft, p);
       break;
     case Motion::RearRightPayout:
-      drive(kRearRight, -p);
+      driveCorner(Corner::RearRight, -p);
       break;
     case Motion::RearRightRetrieve:
-      drive(kRearRight, p);
+      driveCorner(Corner::RearRight, p);
       break;
     case Motion::Stopped:
     case Motion::Joystick:
+    case Motion::Calibration:
       break;
   }
 
@@ -351,14 +395,15 @@ void MotorController::applyJoystick(int8_t xPercent, int8_t yPercent) {
 
   // Briefly stop every H-bridge input before applying a changed mix.
   stopAllChannels();
-  drive(kFrontLeft, frontLeft);
-  drive(kFrontRight, frontRight);
-  drive(kRearLeft, rearLeft);
-  drive(kRearRight, rearRight);
+  driveCorner(Corner::FrontLeft, frontLeft);
+  driveCorner(Corner::FrontRight, frontRight);
+  driveCorner(Corner::RearLeft, rearLeft);
+  driveCorner(Corner::RearRight, rearRight);
 
   joystickX_ = adjustedX;
   joystickY_ = adjustedY;
   motion_ = Motion::Joystick;
+  calibrationSlot_ = -1;
   Serial.printf("[motors] joystick x=%d y=%d fl=%d fr=%d rl=%d rr=%d%s\n",
                 adjustedX, adjustedY, frontLeft, frontRight, rearLeft,
                 rearRight,
@@ -368,6 +413,105 @@ void MotorController::applyJoystick(int8_t xPercent, int8_t yPercent) {
                 ""
 #endif
   );
+}
+
+void MotorController::calibrationSpin(uint8_t slot, bool payout) {
+  if (slot >= kSlotCount) return;
+  stopAllChannels();
+  const int16_t power = payout
+                             ? static_cast<int16_t>(-Config::kCalibrationSpeedPercent)
+                             : static_cast<int16_t>(Config::kCalibrationSpeedPercent);
+  drive(slot, power);
+  motion_ = Motion::Calibration;
+  joystickX_ = 0;
+  joystickY_ = 0;
+  calibrationSlot_ = static_cast<int8_t>(slot);
+  calibrationPayout_ = payout;
+  Serial.printf("[motors] calibration spin slot=%u %s%s\n", slot + 1,
+                payout ? "payout" : "retrieve",
+#if TEST_MODE
+                " (simulated)"
+#else
+                ""
+#endif
+  );
+}
+
+int8_t MotorController::calibrationSlot() const { return calibrationSlot_; }
+
+bool MotorController::calibrationPayout() const { return calibrationPayout_; }
+
+MotorController::SlotCalibration MotorController::slotCalibration(
+    uint8_t slot) const {
+  if (slot >= kSlotCount) return {Corner::FrontLeft, false};
+  return slots_[slot];
+}
+
+bool MotorController::applyCalibration(
+    const SlotCalibration (&assignments)[kSlotCount]) {
+  bool seen[4] = {false, false, false, false};
+  for (uint8_t i = 0; i < kSlotCount; ++i) {
+    const uint8_t cornerIndex = static_cast<uint8_t>(assignments[i].corner);
+    if (cornerIndex >= 4 || seen[cornerIndex]) return false;
+    seen[cornerIndex] = true;
+  }
+
+  stop();  // Motors are fully stopped before the slot->corner mapping moves.
+  for (uint8_t i = 0; i < kSlotCount; ++i) slots_[i] = assignments[i];
+  persistCalibration();
+  Serial.println("[motors] calibration saved");
+  return true;
+}
+
+void MotorController::resetCalibration() {
+  stop();
+  for (uint8_t i = 0; i < kSlotCount; ++i) slots_[i] = kDefaultSlotCalibration[i];
+  persistCalibration();
+  Serial.println("[motors] calibration reset to default");
+}
+
+void MotorController::loadCalibrationFromStorage() {
+  Preferences prefs;
+  if (!prefs.begin(kPrefsNamespace, /*readOnly=*/true)) return;
+  uint8_t blob[kSlotCount * 2];
+  if (prefs.getBytesLength(kPrefsKey) == sizeof(blob) &&
+      prefs.getBytes(kPrefsKey, blob, sizeof(blob)) == sizeof(blob)) {
+    SlotCalibration candidate[kSlotCount];
+    bool seen[4] = {false, false, false, false};
+    bool valid = true;
+    for (uint8_t i = 0; i < kSlotCount && valid; ++i) {
+      const uint8_t cornerIndex = blob[i * 2];
+      if (cornerIndex >= 4 || seen[cornerIndex]) {
+        valid = false;
+        break;
+      }
+      seen[cornerIndex] = true;
+      candidate[i].corner = static_cast<Corner>(cornerIndex);
+      candidate[i].inverted = blob[i * 2 + 1] != 0;
+    }
+    if (valid) {
+      for (uint8_t i = 0; i < kSlotCount; ++i) slots_[i] = candidate[i];
+      Serial.println("[motors] loaded saved calibration from flash");
+    } else {
+      Serial.println("[motors] saved calibration was invalid; using default");
+    }
+  }
+  prefs.end();
+}
+
+void MotorController::persistCalibration() const {
+  Preferences prefs;
+  if (!prefs.begin(kPrefsNamespace, /*readOnly=*/false)) {
+    Serial.println("[motors] failed to open flash storage to save calibration");
+    return;
+  }
+  uint8_t blob[kSlotCount * 2];
+  for (uint8_t i = 0; i < kSlotCount; ++i) {
+    blob[i * 2] = static_cast<uint8_t>(slots_[i].corner);
+    blob[i * 2 + 1] = slots_[i].inverted ? 1 : 0;
+  }
+  prefs.putBytes(kPrefsKey, blob, sizeof(blob));
+  prefs.end();
 }
 
 void MotorController::stop() { apply(Motion::Stopped); }

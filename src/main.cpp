@@ -89,6 +89,24 @@ uint8_t currentSpeedPercent() {
   return guard.ok() ? motors.speedPercent() : 0;
 }
 
+struct CalibrationState {
+  int8_t spinningSlot;
+  bool spinningPayout;
+  MotorController::SlotCalibration slots[MotorController::kSlotCount];
+};
+
+CalibrationState currentCalibration() {
+  MotorMutexGuard guard;
+  CalibrationState state{-1, false, {}};
+  if (!guard.ok()) return state;
+  state.spinningSlot = motors.calibrationSlot();
+  state.spinningPayout = motors.calibrationPayout();
+  for (uint8_t i = 0; i < MotorController::kSlotCount; ++i) {
+    state.slots[i] = motors.slotCalibration(i);
+  }
+  return state;
+}
+
 String statusJson() {
   attitude.update();
   String json;
@@ -147,6 +165,27 @@ String statusJson() {
     json += F(",\"rearRight\":");
     json += static_cast<int>(powers.rearRight);
     json += F("}");
+  }
+  json += F(",\"calibrationSpeedPercent\":");
+  json += static_cast<int>(Config::kCalibrationSpeedPercent);
+  {
+    const CalibrationState calibration = currentCalibration();
+    json += F(",\"calibrationSlot\":");
+    json += static_cast<int>(calibration.spinningSlot);
+    json += F(",\"calibrationDirection\":\"");
+    json += calibration.spinningSlot >= 0
+                ? (calibration.spinningPayout ? F("payout") : F("retrieve"))
+                : F("none");
+    json += F("\",\"calibration\":[");
+    for (uint8_t i = 0; i < MotorController::kSlotCount; ++i) {
+      if (i > 0) json += F(",");
+      json += F("{\"corner\":\"");
+      json += cornerName(calibration.slots[i].corner);
+      json += F("\",\"inverted\":");
+      json += calibration.slots[i].inverted ? F("true") : F("false");
+      json += F("}");
+    }
+    json += F("]");
   }
   json += F("}");
   return json;
@@ -291,6 +330,91 @@ void handleClearEmergencyStop() {
   sendJson(200, statusJson());
 }
 
+bool parseSlot(const String& value, uint8_t& slot) {
+  char* end = nullptr;
+  const long parsed = strtol(value.c_str(), &end, 10);
+  if (end == value.c_str() || *end != '\0' || parsed < 0 ||
+      parsed >= MotorController::kSlotCount) {
+    return false;
+  }
+  slot = static_cast<uint8_t>(parsed);
+  return true;
+}
+
+void handleCalibrationSpin() {
+  if (emergencyStopLatched) {
+    sendJson(423, F("{\"error\":\"Emergency stop is latched\"}"));
+    return;
+  }
+
+  uint8_t slot = 0;
+  bool payout;
+  if (!server.hasArg("slot") || !parseSlot(server.arg("slot"), slot)) {
+    stopForSafety("invalid calibration slot");
+    sendJson(400, F("{\"error\":\"slot must be 0-3\"}"));
+    return;
+  }
+  if (server.arg("direction") == "payout") {
+    payout = true;
+  } else if (server.arg("direction") == "retrieve") {
+    payout = false;
+  } else {
+    stopForSafety("invalid calibration direction");
+    sendJson(400, F("{\"error\":\"direction must be payout or retrieve\"}"));
+    return;
+  }
+
+  lastCommandLabel = "calibration-spin";
+  lastValidMotionMs = millis();
+  {
+    MotorMutexGuard guard;
+    if (guard.ok()) motors.calibrationSpin(slot, payout);
+  }
+  motionActive = currentMotion() != Motion::Stopped;
+  sendJson(200, statusJson());
+}
+
+void handleCalibrationSave() {
+  MotorController::SlotCalibration assignments[MotorController::kSlotCount];
+  for (uint8_t i = 0; i < MotorController::kSlotCount; ++i) {
+    const String cornerKey = "slot" + String(i) + "corner";
+    const String invertedKey = "slot" + String(i) + "inverted";
+    Corner corner;
+    if (!server.hasArg(cornerKey) || !parseCorner(server.arg(cornerKey), corner)) {
+      sendJson(400, F("{\"error\":\"Missing or invalid corner for a motor slot\"}"));
+      return;
+    }
+    assignments[i].corner = corner;
+    assignments[i].inverted = server.arg(invertedKey) == "1";
+  }
+
+  bool applied = false;
+  {
+    MotorMutexGuard guard;
+    if (guard.ok()) applied = motors.applyCalibration(assignments);
+  }
+  if (!applied) {
+    sendJson(409,
+             F("{\"error\":\"Each corner must be assigned to exactly one "
+               "motor\"}"));
+    return;
+  }
+  motionActive = false;
+  lastCommandLabel = "calibration-save";
+  Serial.println("[calibration] saved from web UI");
+  sendJson(200, statusJson());
+}
+
+void handleCalibrationReset() {
+  {
+    MotorMutexGuard guard;
+    if (guard.ok()) motors.resetCalibration();
+  }
+  motionActive = false;
+  lastCommandLabel = "calibration-reset";
+  sendJson(200, statusJson());
+}
+
 void handleSetLevel() {
   if (!attitude.setLevel()) {
     sendJson(503, F("{\"error\":\"MPU6050 is not connected\"}"));
@@ -314,6 +438,9 @@ void configureServer() {
   server.on("/api/estop/clear", HTTP_POST, handleClearEmergencyStop);
   server.on("/api/speed", HTTP_POST, handleSpeed);
   server.on("/api/attitude/level", HTTP_POST, handleSetLevel);
+  server.on("/api/calibration/spin", HTTP_POST, handleCalibrationSpin);
+  server.on("/api/calibration/save", HTTP_POST, handleCalibrationSave);
+  server.on("/api/calibration/reset", HTTP_POST, handleCalibrationReset);
   server.onNotFound([]() {
     stopForSafety("unknown request");
     sendJson(404, F("{\"error\":\"Not found\"}"));
@@ -323,19 +450,18 @@ void configureServer() {
 
 void printPinAssignments() {
   Serial.println("Motor pin assignments (GPIO):");
-  Serial.printf("  Front Left : A=%u B=%u%s\n", Config::kFrontLeftWinchA,
-                Config::kFrontLeftWinchB,
-                Config::kFrontLeftInverted ? " (inverted)" : "");
-  Serial.printf("  Front Right: A=%u B=%u%s\n", Config::kFrontRightWinchA,
-                Config::kFrontRightWinchB,
-                Config::kFrontRightInverted ? " (inverted)" : "");
-  Serial.printf("  Rear Left  : A=%u B=%u%s\n", Config::kRearLeftWinchA,
-                Config::kRearLeftWinchB,
-                Config::kRearLeftInverted ? " (inverted)" : "");
-  Serial.printf("  Rear Right : A=%u B=%u%s\n", Config::kRearRightWinchA,
-                Config::kRearRightWinchB,
-                Config::kRearRightInverted ? " (inverted)" : "");
+  Serial.printf("  Motor 1: A=%u B=%u\n", Config::kMotor1PinA,
+                Config::kMotor1PinB);
+  Serial.printf("  Motor 2: A=%u B=%u\n", Config::kMotor2PinA,
+                Config::kMotor2PinB);
+  Serial.printf("  Motor 3: A=%u B=%u\n", Config::kMotor3PinA,
+                Config::kMotor3PinB);
+  Serial.printf("  Motor 4: A=%u B=%u\n", Config::kMotor4PinA,
+                Config::kMotor4PinB);
   Serial.printf("  I2C: SDA=%u SCL=%u\n", Config::kI2cSda, Config::kI2cScl);
+  Serial.println(
+      "  Which corner each motor drives is set from the web UI's "
+      "calibration tab (persisted in flash).");
 }
 
 }  // namespace
@@ -388,6 +514,15 @@ void setup() {
 #endif
   );
   printPinAssignments();
+  {
+    const CalibrationState calibration = currentCalibration();
+    Serial.println("Motor calibration (slot -> corner):");
+    for (uint8_t i = 0; i < MotorController::kSlotCount; ++i) {
+      Serial.printf("  Motor %u -> %s%s\n", i + 1,
+                    cornerName(calibration.slots[i].corner),
+                    calibration.slots[i].inverted ? " (inverted)" : "");
+    }
+  }
   Serial.printf("MPU6050: %s\n",
                 attitude.connected()
                     ? "detected"

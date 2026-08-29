@@ -10,6 +10,7 @@
             "includePath": [
                 "/Users/tahasalman/Desktop/ENGG1100/include",
                 "/Users/tahasalman/Desktop/ENGG1100/src",
+                "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/Preferences/src",
                 "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/WebServer/src",
                 "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/FS/src",
                 "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/WiFi/src",
@@ -227,7 +228,6 @@
                 "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/Insights/src",
                 "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/LittleFS/src",
                 "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/NetBIOS/src",
-                "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/Preferences/src",
                 "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/RainMaker/src",
                 "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/SD/src",
                 "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/SD_MMC/src",
@@ -246,6 +246,7 @@
                 "path": [
                     "/Users/tahasalman/Desktop/ENGG1100/include",
                     "/Users/tahasalman/Desktop/ENGG1100/src",
+                    "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/Preferences/src",
                     "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/WebServer/src",
                     "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/FS/src",
                     "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/WiFi/src",
@@ -463,7 +464,6 @@
                     "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/Insights/src",
                     "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/LittleFS/src",
                     "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/NetBIOS/src",
-                    "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/Preferences/src",
                     "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/RainMaker/src",
                     "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/SD/src",
                     "/Users/tahasalman/.platformio/packages/framework-arduinoespressif32/libraries/SD_MMC/src",

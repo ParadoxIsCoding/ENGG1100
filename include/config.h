@@ -32,6 +32,11 @@ constexpr uint8_t kMinSpeedPercent = 5;
 constexpr uint8_t kDefaultSpeedPercent = 20;
 constexpr uint8_t kMaxSpeedPercent = 35;
 
+// Fixed, deliberately gentle speed used only by the calibration tab's
+// hold-to-spin test. Independent of the drive speed slider so identifying a
+// motor never happens at whatever speed drive was last left at.
+constexpr uint8_t kCalibrationSpeedPercent = 15;
+
 #if BOARD_S3
 // ------------------------------------------------------------------------
 // Placeholder ESP32-S3 N16R8 GPIO map. This board is NOT physically wired
@@ -42,14 +47,14 @@ constexpr uint8_t kMaxSpeedPercent = 35;
 // GPIO 26-32 and 33-37, which the S3 module uses internally for flash/PSRAM.
 // Do NOT assume this list is safe until it has been checked.
 // ------------------------------------------------------------------------
-constexpr uint8_t kFrontLeftWinchA = 13;
-constexpr uint8_t kFrontLeftWinchB = 14;
-constexpr uint8_t kRearLeftWinchA = 16;
-constexpr uint8_t kRearLeftWinchB = 17;
-constexpr uint8_t kFrontRightWinchA = 18;
-constexpr uint8_t kFrontRightWinchB = 19;
-constexpr uint8_t kRearRightWinchA = 25;
-constexpr uint8_t kRearRightWinchB = 26;
+constexpr uint8_t kMotor1PinA = 13;
+constexpr uint8_t kMotor1PinB = 14;
+constexpr uint8_t kMotor2PinA = 16;
+constexpr uint8_t kMotor2PinB = 17;
+constexpr uint8_t kMotor3PinA = 18;
+constexpr uint8_t kMotor3PinB = 19;
+constexpr uint8_t kMotor4PinA = 25;
+constexpr uint8_t kMotor4PinB = 26;
 
 constexpr uint8_t kI2cSda = 21;
 constexpr uint8_t kI2cScl = 22;
@@ -59,29 +64,25 @@ constexpr uint8_t kI2cScl = 22;
 // This matches the bench wiring exactly. Do not use GPIO 6-11: they are
 // tied to the module's internal flash interface.
 //
-// Driver 1: channel A = Front Left, channel B = Rear Left
-// Driver 2: channel A = Front Right, channel B = Rear Right
+// These four motor slots are physical wiring positions, not corners — which
+// corner each slot actually drives (and whether it needs to spin inverted)
+// is a runtime mapping assigned from the web UI's calibration tab and
+// stored in flash (see MotorController::loadCalibrationFromStorage). Swapping
+// which winch is plugged into which driver channel no longer needs a
+// firmware change, just re-running calibration.
 // ------------------------------------------------------------------------
-constexpr uint8_t kFrontLeftWinchA = 13;   // L9110S #1, A-IA
-constexpr uint8_t kFrontLeftWinchB = 14;   // L9110S #1, A-IB
-constexpr uint8_t kRearLeftWinchA = 16;    // L9110S #1, B-IA
-constexpr uint8_t kRearLeftWinchB = 17;    // L9110S #1, B-IB
-constexpr uint8_t kFrontRightWinchA = 18;  // L9110S #2, A-IA
-constexpr uint8_t kFrontRightWinchB = 19;  // L9110S #2, A-IB
-constexpr uint8_t kRearRightWinchA = 25;   // L9110S #2, B-IA
-constexpr uint8_t kRearRightWinchB = 26;   // L9110S #2, B-IB
+constexpr uint8_t kMotor1PinA = 13;  // L9110S #1, A-IA
+constexpr uint8_t kMotor1PinB = 14;  // L9110S #1, A-IB
+constexpr uint8_t kMotor2PinA = 16;  // L9110S #1, B-IA
+constexpr uint8_t kMotor2PinB = 17;  // L9110S #1, B-IB
+constexpr uint8_t kMotor3PinA = 18;  // L9110S #2, A-IA
+constexpr uint8_t kMotor3PinB = 19;  // L9110S #2, A-IB
+constexpr uint8_t kMotor4PinA = 25;  // L9110S #2, B-IA
+constexpr uint8_t kMotor4PinB = 26;  // L9110S #2, B-IB
 
 constexpr uint8_t kI2cSda = 21;  // GY-521 SDA
 constexpr uint8_t kI2cScl = 22;  // GY-521 SCL
 #endif
-
-// Motor wire polarity has not been physically verified. If a motor reels
-// the wrong way on first test, flip its flag here — never touch the
-// movement/joystick math to compensate for a single reversed motor.
-constexpr bool kFrontLeftInverted = false;
-constexpr bool kFrontRightInverted = false;
-constexpr bool kRearLeftInverted = false;
-constexpr bool kRearRightInverted = false;
 
 // GY-521 (MPU6050) tilt sensor, address 0x68 (AD0 tied low / floating).
 // Set to false to skip I2C/sensor startup entirely; hardware mode still

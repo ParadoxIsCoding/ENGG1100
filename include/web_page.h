@@ -6,26 +6,32 @@ const char kControlPage[] PROGMEM = R"HTML(
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#07111f">
+  <meta name="theme-color" content="#000000">
   <title>Station Keeper</title>
   <style>
-    :root { color-scheme: dark; font-family: system-ui,-apple-system,sans-serif; }
+    :root {
+      color-scheme: dark;
+      font-family: system-ui,-apple-system,sans-serif;
+      --bg: #000; --panel: #0d0d0d; --panel-alt: #111; --border: #2a2a2a; --border-soft: #1c1c1c;
+      --text: #fff; --muted: #8a8a8a; --dim: #555;
+      --red: #ef3b3b; --red-strong: #ff2d2d; --red-deep: #7a1414; --red-wash: #1a0a0a;
+    }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html,body { overscroll-behavior: none; }
-    body { margin: 0; min-height: 100dvh; background: #07111f; color: #f7fbff; touch-action: manipulation; }
+    body { margin: 0; min-height: 100dvh; background: var(--bg); color: var(--text); touch-action: manipulation; }
     main { width: min(100%, 30rem); margin: auto; padding: max(.6rem,env(safe-area-inset-top)) .75rem calc(6.7rem + env(safe-area-inset-bottom)); }
     header { display: flex; align-items: center; justify-content: space-between; gap: .55rem; min-height: 2rem; }
     .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
     .status-line { min-width: 0; display: flex; align-items: center; gap: .5rem; }
-    .pill { border: 1px solid #3d536c; border-radius: 999px; padding: .35rem .65rem; font-size: .8rem; }
-    .online { color: #70f0b0; border-color: #287f59; }
-    .offline { color: #ffadad; border-color: #963e45; }
-    .panel { margin-top: .65rem; padding: .7rem; background: #101d2d; border: 1px solid #263b52; border-radius: .9rem; }
-    #mode { flex: none; color: #9dc7f1; font-size: .67rem; font-weight: 750; letter-spacing: .04em; }
+    .pill { border: 1px solid var(--border); border-radius: 999px; padding: .35rem .65rem; font-size: .8rem; }
+    .online { color: var(--text); border-color: var(--dim); }
+    .offline { color: var(--red); border-color: var(--red-deep); }
+    .panel { margin-top: .65rem; padding: .7rem; background: var(--panel); border: 1px solid var(--border); border-radius: .9rem; }
+    #mode { flex: none; color: var(--muted); font-size: .67rem; font-weight: 750; letter-spacing: .04em; }
     #state { min-width: 0; margin: 0; overflow: hidden; font-size: .82rem; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
     .attitude-panel { display: grid; grid-template-columns: 7rem 1fr; align-items: center; gap: .7rem; }
-    .horizon { position: relative; width: 7rem; aspect-ratio: 1; overflow: hidden; border: 3px solid #60758c; border-radius: 50%; background: #132131; box-shadow: inset 0 0 1.2rem #000b,0 .35rem .8rem #03091288; }
-    .horizon-world { position: absolute; left: 50%; top: 50%; width: 320%; height: 320%; background: linear-gradient(to bottom,#2378b7 0 49.7%,#f3f4f4 49.7% 50.3%,#8b542e 50.3% 100%); transform: translate(-50%,-50%); transition: transform 45ms linear; will-change: transform; }
+    .horizon { position: relative; width: 7rem; aspect-ratio: 1; overflow: hidden; border: 3px solid var(--border); border-radius: 50%; background: #050505; box-shadow: inset 0 0 1.2rem #000b,0 .35rem .8rem #03091288; }
+    .horizon-world { position: absolute; left: 50%; top: 50%; width: 320%; height: 320%; background: linear-gradient(to bottom,#1a1a1a 0 49.7%,#fff 49.7% 50.3%,#000 50.3% 100%); transform: translate(-50%,-50%); transition: transform 45ms linear; will-change: transform; }
     .pitch-line { position: absolute; left: 50%; width: 2rem; height: 1px; background: #fff; box-shadow: 0 1px #0008; transform: translateX(-50%); }
     .pitch-line.long { width: 3.2rem; }
     .p-up-10 { top: calc(50% - 20px); } .p-up-5 { top: calc(50% - 10px); }
@@ -33,64 +39,79 @@ const char kControlPage[] PROGMEM = R"HTML(
     .bank-marks { position: absolute; inset: .35rem; border-top: 2px solid #fff; border-radius: 50%; pointer-events: none; }
     .bank-pointer { position: absolute; top: .3rem; left: 50%; width: 0; height: 0; border-left: .34rem solid transparent; border-right: .34rem solid transparent; border-top: .55rem solid #fff; transform: translateX(-50%); }
     .aircraft { position: absolute; left: 50%; top: 50%; width: 58%; height: 1.7rem; transform: translate(-50%,-50%); pointer-events: none; }
-    .aircraft::before,.aircraft::after { content: ''; position: absolute; top: .72rem; width: 38%; height: .22rem; border: 1px solid #171717; background: #ffd43b; }
+    .aircraft::before,.aircraft::after { content: ''; position: absolute; top: .72rem; width: 38%; height: .22rem; border: 1px solid #000; background: var(--red); }
     .aircraft::before { left: 0; transform: rotate(8deg); transform-origin: right; }
     .aircraft::after { right: 0; transform: rotate(-8deg); transform-origin: left; }
-    .aircraft-centre { position: absolute; left: 50%; top: 50%; width: .65rem; aspect-ratio: 1; border: .18rem solid #171717; border-radius: 50%; background: #ffd43b; transform: translate(-50%,-50%); }
+    .aircraft-centre { position: absolute; left: 50%; top: 50%; width: .65rem; aspect-ratio: 1; border: .18rem solid #000; border-radius: 50%; background: var(--red); transform: translate(-50%,-50%); }
     .attitude-readings { display: grid; width: 100%; grid-template-columns: 1fr 1fr; align-items: center; gap: .45rem; }
-    .attitude-value { padding: .5rem .35rem; border: 1px solid #31475f; border-radius: .65rem; background: #0c1928; text-align: center; }
-    .attitude-value span { display: block; color: #9db0c4; font-size: .68rem; font-weight: 700; letter-spacing: .08em; }
+    .attitude-value { padding: .5rem .35rem; border: 1px solid var(--border); border-radius: .65rem; background: var(--panel-alt); text-align: center; }
+    .attitude-value span { display: block; color: var(--muted); font-size: .68rem; font-weight: 700; letter-spacing: .08em; }
     .attitude-value strong { display: block; margin-top: .08rem; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
     #tilt-status { justify-self: stretch; padding: .35rem .4rem; border: 1px solid currentColor; border-radius: .6rem; font-size: .69rem; font-weight: 800; letter-spacing: .05em; text-align: center; }
-    .tilt-green { color: #70f0b0; } .tilt-amber { color: #ffc85c; } .tilt-red { color: #ff7a86; }
-    #vertical-motion { grid-column: 1 / -1; padding: .3rem .4rem; border: 1px solid #31475f; border-radius: .6rem; font-size: .72rem; font-weight: 800; letter-spacing: .07em; text-align: center; }
-    .motion-steady { color: #a9bad0; } .motion-rising { color: #70f0b0; } .motion-falling { color: #75bfff; }
+    .tilt-green { color: var(--text); } .tilt-amber { color: var(--red); } .tilt-red { color: #fff; background: var(--red); border-color: var(--red); }
+    #vertical-motion { grid-column: 1 / -1; padding: .3rem .4rem; border: 1px solid var(--border); border-radius: .6rem; font-size: .72rem; font-weight: 800; letter-spacing: .07em; text-align: center; }
+    .motion-steady { color: var(--muted); } .motion-rising { color: var(--text); } .motion-falling { color: var(--red); }
     .level { min-height: 2.3rem; padding: 0 .4rem; white-space: nowrap; }
-    .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: .45rem; margin-top: .65rem; padding: .25rem; border: 1px solid #263b52; border-radius: .85rem; background: #0c1928; }
-    .tab { min-height: 2.7rem; border: 0; border-radius: .65rem; background: transparent; color: #9db0c4; }
-    .tab.selected { background: #2073b8; color: #fff; }
+    .tabs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .45rem; margin-top: .65rem; padding: .25rem; border: 1px solid var(--border); border-radius: .85rem; background: var(--panel-alt); }
+    .tab { min-height: 2.7rem; padding: 0 .2rem; border: 0; border-radius: .65rem; background: transparent; color: var(--muted); font-size: .85rem; }
+    .tab.selected { background: var(--red); color: #fff; }
     .control-view { margin-top: .65rem; }
     .controls { display: flex; flex-direction: column; align-items: center; gap: .6rem; }
-    button { min-height: 3.65rem; border: 1px solid #49627f; border-radius: .8rem; background: #172b42; color: inherit; font: inherit; font-weight: 750; touch-action: none; user-select: none; }
-    button:active,.active { background: #2073b8; transform: scale(.98); }
-    button:focus-visible { outline: 3px solid #75bfff; outline-offset: 2px; }
-    .joystick { position: relative; width: min(58vw,14.5rem); aspect-ratio: 1; border: 2px solid #49627f; border-radius: 50%; background: radial-gradient(circle at center,#213850 0 11%,#14273b 12% 54%,#0c1928 55%); box-shadow: inset 0 0 0 1px #0a1522,0 .5rem 1.2rem #03091266; touch-action: none; user-select: none; cursor: grab; }
-    .joystick.active { background: radial-gradient(circle at center,#284b69 0 11%,#17324b 12% 54%,#0c1928 55%); transform: none; cursor: grabbing; }
-    .joystick:focus-visible { outline: 3px solid #75bfff; outline-offset: 4px; }
-    .joystick::before,.joystick::after { content: ''; position: absolute; inset: 50% 10%; height: 1px; background: #63809c55; pointer-events: none; }
+    button { min-height: 3.65rem; border: 1px solid var(--border); border-radius: .8rem; background: var(--panel-alt); color: inherit; font: inherit; font-weight: 750; touch-action: none; user-select: none; }
+    button:active,.active { background: var(--red); border-color: var(--red); transform: scale(.98); }
+    button:focus-visible { outline: 3px solid var(--red); outline-offset: 2px; }
+    .joystick { position: relative; width: min(58vw,14.5rem); aspect-ratio: 1; border: 2px solid var(--border); border-radius: 50%; background: radial-gradient(circle at center,#1a1a1a 0 11%,#111 12% 54%,#0a0a0a 55%); box-shadow: inset 0 0 0 1px #000,0 .5rem 1.2rem #00000066; touch-action: none; user-select: none; cursor: grab; }
+    .joystick.active { background: radial-gradient(circle at center,#2a1414 0 11%,#1a0d0d 12% 54%,#0a0a0a 55%); transform: none; cursor: grabbing; }
+    .joystick:focus-visible { outline: 3px solid var(--red); outline-offset: 4px; }
+    .joystick::before,.joystick::after { content: ''; position: absolute; inset: 50% 10%; height: 1px; background: #44444455; pointer-events: none; }
     .joystick::after { inset: 10% 50%; width: 1px; height: auto; }
-    .axis { position: absolute; color: #8da8c0; font-size: .68rem; font-weight: 750; letter-spacing: .08em; pointer-events: none; }
+    .axis { position: absolute; color: var(--muted); font-size: .68rem; font-weight: 750; letter-spacing: .08em; pointer-events: none; }
     .axis-up { top: .7rem; left: 50%; transform: translateX(-50%); }
     .axis-down { bottom: .7rem; left: 50%; transform: translateX(-50%); }
     .axis-left { left: .7rem; top: 50%; transform: translateY(-50%); }
     .axis-right { right: .7rem; top: 50%; transform: translateY(-50%); }
-    .stick { position: absolute; left: 50%; top: 50%; width: 4.6rem; aspect-ratio: 1; border: 2px solid #8ac9ff; border-radius: 50%; background: linear-gradient(145deg,#3687c7,#17558a); box-shadow: 0 .35rem .8rem #02070daa,inset 0 1px 1px #b9e2ff99; transform: translate(-50%,-50%); pointer-events: none; }
+    .stick { position: absolute; left: 50%; top: 50%; width: 4.6rem; aspect-ratio: 1; border: 2px solid var(--red); border-radius: 50%; background: linear-gradient(145deg,var(--red),var(--red-deep)); box-shadow: 0 .35rem .8rem #000a,inset 0 1px 1px #ffffff33; transform: translate(-50%,-50%); pointer-events: none; }
     .secondary { display: grid; width: 100%; grid-template-columns: 1fr 1fr; gap: .55rem; }
     .tether-controls { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
     .tether-controls button { min-height: 5.4rem; font-size: 1rem; }
     .trim-controls { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin-top: .6rem; }
     .trim-controls button { min-height: 4rem; font-size: .88rem; }
-    .payout { background: #174f72; }
-    .retrieve { background: #3c315f; }
-    .safety-dock { position: fixed; z-index: 20; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: .8fr 1.2fr; gap: .55rem; width: min(100%,30rem); margin: auto; padding: .6rem .75rem max(.6rem,env(safe-area-inset-bottom)); border-top: 1px solid #31475f; background: #07111ff2; box-shadow: 0 -.4rem 1rem #0007; backdrop-filter: blur(12px); }
-    .stop { background: #7c2731; border-color: #ca5866; font-size: 1rem; }
-    .estop { background: #c92e3e; border-color: #ff7a86; font-size: 1rem; }
-    .reset { grid-column: 1 / -1; min-height: 2.8rem; background: #172b42; }
+    .safety-dock { position: fixed; z-index: 20; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: .8fr 1.2fr; gap: .55rem; width: min(100%,30rem); margin: auto; padding: .6rem .75rem max(.6rem,env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: #000000f2; box-shadow: 0 -.4rem 1rem #0007; backdrop-filter: blur(12px); }
+    .stop { background: var(--red-wash); border-color: var(--red); color: var(--red); font-size: 1rem; }
+    .estop { background: var(--red); border-color: var(--red); color: #fff; font-size: 1rem; }
+    .reset { grid-column: 1 / -1; min-height: 2.8rem; background: var(--panel-alt); }
     .speed-row { display: flex; align-items: center; gap: .6rem; margin-top: .55rem; }
-    .speed-row label { flex: none; color: #9db0c4; font-size: .72rem; font-weight: 750; letter-spacing: .05em; }
-    .speed-row input[type=range] { flex: 1; }
+    .speed-row label { flex: none; color: var(--muted); font-size: .72rem; font-weight: 750; letter-spacing: .05em; }
+    .speed-row input[type=range] { flex: 1; accent-color: var(--red); }
     .speed-row strong { flex: none; min-width: 3.4rem; text-align: right; font-variant-numeric: tabular-nums; }
     .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin-top: .6rem; }
-    .stat { padding: .4rem .5rem; border: 1px solid #263b52; border-radius: .6rem; background: #0c1928; overflow: hidden; }
-    .stat span { display: block; color: #9db0c4; font-size: .64rem; font-weight: 750; letter-spacing: .06em; }
+    .stat { padding: .4rem .5rem; border: 1px solid var(--border); border-radius: .6rem; background: var(--panel-alt); overflow: hidden; }
+    .stat span { display: block; color: var(--muted); font-size: .64rem; font-weight: 750; letter-spacing: .06em; }
     .stat strong { display: block; margin-top: .05rem; font-size: .82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .motor-cards { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin-top: .6rem; }
-    .motor-card { padding: .45rem .5rem; border: 1px solid #263b52; border-radius: .6rem; background: #0c1928; text-align: center; }
-    .motor-card span { display: block; color: #9db0c4; font-size: .64rem; font-weight: 750; letter-spacing: .06em; }
+    .motor-card { padding: .45rem .5rem; border: 1px solid var(--border); border-radius: .6rem; background: var(--panel-alt); text-align: center; }
+    .motor-card span { display: block; color: var(--muted); font-size: .64rem; font-weight: 750; letter-spacing: .06em; }
     .motor-card strong { display: block; margin-top: .1rem; font-size: .88rem; }
-    .motor-card.motor-in strong { color: #70f0b0; }
-    .motor-card.motor-out strong { color: #75bfff; }
-    .motor-card.motor-stopped strong { color: #9db0c4; }
+    .motor-card.motor-in strong, .motor-card.motor-out strong { color: var(--red); }
+    .motor-card.motor-stopped strong { color: var(--muted); }
+    .cal-hint { margin: 0 0 .6rem; padding: .55rem .6rem; border: 1px solid var(--border); border-radius: .7rem; background: var(--panel-alt); color: var(--muted); font-size: .78rem; line-height: 1.35; }
+    .cal-slots { display: flex; flex-direction: column; gap: .6rem; }
+    .cal-slot { padding: .55rem; border: 1px solid var(--border); border-radius: .8rem; background: var(--panel); }
+    .cal-slot.spinning { border-color: var(--red); }
+    .cal-slot-head { display: flex; align-items: center; justify-content: space-between; font-size: .82rem; font-weight: 800; letter-spacing: .04em; }
+    .cal-slot-status { color: var(--red); font-size: .68rem; font-weight: 750; letter-spacing: .05em; min-height: 1rem; }
+    .cal-spin-row { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin-top: .45rem; }
+    .cal-spin-row button { min-height: 3.2rem; font-size: .85rem; }
+    .cal-corner-row { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: .4rem; margin-top: .45rem; }
+    .cal-corner-row button { min-height: 2.5rem; padding: 0; font-size: .78rem; background: var(--panel-alt); }
+    .cal-corner-row button.selected { background: var(--red); border-color: var(--red); color: #fff; }
+    .cal-invert { width: 100%; min-height: 2.4rem; margin-top: .45rem; font-size: .78rem; background: var(--panel-alt); }
+    .cal-invert.active { background: var(--red-wash); border-color: var(--red); color: var(--red); }
+    .cal-actions { display: grid; grid-template-columns: 1fr 1fr; gap: .55rem; margin-top: .7rem; }
+    .cal-actions button { min-height: 3rem; font-size: .85rem; }
+    #cal-save:not(:disabled) { border-color: var(--red); color: var(--red); }
+    #cal-save:disabled { opacity: .4; }
+    #cal-message { min-height: 1.1rem; margin: .5rem 0 0; text-align: center; font-size: .78rem; font-weight: 750; color: var(--muted); }
     [hidden] { display: none; }
     @media (max-height: 700px) { .attitude-panel { grid-template-columns: 5.7rem 1fr; } .horizon { width: 5.7rem; } .joystick { width: min(48vw,11.5rem); } .tether-controls button { min-height: 4.2rem; } .trim-controls button { min-height: 3.4rem; } }
     @media (orientation: landscape) and (max-height: 520px) { main { width: min(100%,50rem); padding-bottom: calc(5.3rem + env(safe-area-inset-bottom)); } header { position: absolute; top: max(.45rem,env(safe-area-inset-top)); left: .75rem; right: .75rem; } .panel { width: 42%; margin-top: 2.5rem; } .tabs { width: 42%; } .control-view { position: absolute; top: max(.45rem,env(safe-area-inset-top)); right: .75rem; width: 53%; } .joystick { width: min(45vh,11rem); } .safety-dock { width: min(100%,50rem); } }
@@ -144,6 +165,7 @@ const char kControlPage[] PROGMEM = R"HTML(
   <nav class="tabs" aria-label="Control selection">
     <button class="tab selected" type="button" data-tab="drive" aria-controls="drive-controls" aria-selected="true">DRIVE</button>
     <button class="tab" type="button" data-tab="winches" aria-controls="winch-controls" aria-selected="false">WINCHES</button>
+    <button class="tab" type="button" data-tab="calibration" aria-controls="calibration-controls" aria-selected="false">CALIBRATE</button>
   </nav>
 
   <section class="control-view controls" id="drive-controls" aria-label="Hold-to-run drive controls">
@@ -162,8 +184,8 @@ const char kControlPage[] PROGMEM = R"HTML(
 
   <section class="control-view" id="winch-controls" aria-label="Hold-to-run individual corner winch controls" hidden>
     <div class="tether-controls">
-      <button class="payout" data-motion="all-payout" aria-label="Hold to pay all four tethers out">↑<br>ALL OUT</button>
-      <button class="retrieve" data-motion="all-retrieve" aria-label="Hold to take all four tethers in">↓<br>ALL IN</button>
+      <button data-motion="all-payout" aria-label="Hold to pay all four tethers out">↑<br>ALL OUT</button>
+      <button data-motion="all-retrieve" aria-label="Hold to take all four tethers in">↓<br>ALL IN</button>
     </div>
     <div class="trim-controls">
       <button data-motion="front-left-payout" aria-label="Hold to pay the front-left tether out">FL ↑ OUT</button>
@@ -175,6 +197,73 @@ const char kControlPage[] PROGMEM = R"HTML(
       <button data-motion="rear-right-payout" aria-label="Hold to pay the rear-right tether out">RR ↑ OUT</button>
       <button data-motion="rear-right-retrieve" aria-label="Hold to take the rear-right tether in">RR ↓ IN</button>
     </div>
+  </section>
+
+  <section class="control-view" id="calibration-controls" aria-label="Motor identification and calibration" hidden>
+    <p class="cal-hint">Hold OUT or IN on one motor at a time and watch which corner physically moves. Tap that corner below to label it, flip INVERT if it spins the wrong way, then SAVE once all four are labelled. Nothing changes until you press SAVE.</p>
+    <div class="cal-slots">
+      <div class="cal-slot" id="cal-slot-0" data-cal-slot-card="0">
+        <div class="cal-slot-head"><span>MOTOR 1</span><span class="cal-slot-status" data-cal-status="0"></span></div>
+        <div class="cal-spin-row">
+          <button data-cal-slot="0" data-cal-dir="payout" aria-label="Hold to spin motor 1 out">↑ OUT</button>
+          <button data-cal-slot="0" data-cal-dir="retrieve" aria-label="Hold to spin motor 1 in">↓ IN</button>
+        </div>
+        <div class="cal-corner-row" data-cal-corner-group="0">
+          <button type="button" data-corner="front-left">FL</button>
+          <button type="button" data-corner="front-right">FR</button>
+          <button type="button" data-corner="rear-left">RL</button>
+          <button type="button" data-corner="rear-right">RR</button>
+        </div>
+        <button type="button" class="cal-invert" data-cal-invert="0">INVERT: OFF</button>
+      </div>
+      <div class="cal-slot" id="cal-slot-1" data-cal-slot-card="1">
+        <div class="cal-slot-head"><span>MOTOR 2</span><span class="cal-slot-status" data-cal-status="1"></span></div>
+        <div class="cal-spin-row">
+          <button data-cal-slot="1" data-cal-dir="payout" aria-label="Hold to spin motor 2 out">↑ OUT</button>
+          <button data-cal-slot="1" data-cal-dir="retrieve" aria-label="Hold to spin motor 2 in">↓ IN</button>
+        </div>
+        <div class="cal-corner-row" data-cal-corner-group="1">
+          <button type="button" data-corner="front-left">FL</button>
+          <button type="button" data-corner="front-right">FR</button>
+          <button type="button" data-corner="rear-left">RL</button>
+          <button type="button" data-corner="rear-right">RR</button>
+        </div>
+        <button type="button" class="cal-invert" data-cal-invert="1">INVERT: OFF</button>
+      </div>
+      <div class="cal-slot" id="cal-slot-2" data-cal-slot-card="2">
+        <div class="cal-slot-head"><span>MOTOR 3</span><span class="cal-slot-status" data-cal-status="2"></span></div>
+        <div class="cal-spin-row">
+          <button data-cal-slot="2" data-cal-dir="payout" aria-label="Hold to spin motor 3 out">↑ OUT</button>
+          <button data-cal-slot="2" data-cal-dir="retrieve" aria-label="Hold to spin motor 3 in">↓ IN</button>
+        </div>
+        <div class="cal-corner-row" data-cal-corner-group="2">
+          <button type="button" data-corner="front-left">FL</button>
+          <button type="button" data-corner="front-right">FR</button>
+          <button type="button" data-corner="rear-left">RL</button>
+          <button type="button" data-corner="rear-right">RR</button>
+        </div>
+        <button type="button" class="cal-invert" data-cal-invert="2">INVERT: OFF</button>
+      </div>
+      <div class="cal-slot" id="cal-slot-3" data-cal-slot-card="3">
+        <div class="cal-slot-head"><span>MOTOR 4</span><span class="cal-slot-status" data-cal-status="3"></span></div>
+        <div class="cal-spin-row">
+          <button data-cal-slot="3" data-cal-dir="payout" aria-label="Hold to spin motor 4 out">↑ OUT</button>
+          <button data-cal-slot="3" data-cal-dir="retrieve" aria-label="Hold to spin motor 4 in">↓ IN</button>
+        </div>
+        <div class="cal-corner-row" data-cal-corner-group="3">
+          <button type="button" data-corner="front-left">FL</button>
+          <button type="button" data-corner="front-right">FR</button>
+          <button type="button" data-corner="rear-left">RL</button>
+          <button type="button" data-corner="rear-right">RR</button>
+        </div>
+        <button type="button" class="cal-invert" data-cal-invert="3">INVERT: OFF</button>
+      </div>
+    </div>
+    <div class="cal-actions">
+      <button type="button" id="cal-save" disabled>SAVE CALIBRATION</button>
+      <button type="button" id="cal-reset">RESET TO DEFAULT</button>
+    </div>
+    <p id="cal-message" role="status"></p>
   </section>
 </main>
 <div class="safety-dock" aria-label="Safety controls">
@@ -217,6 +306,10 @@ const char kControlPage[] PROGMEM = R"HTML(
   let requestSequence = 0;
   let statusInFlight = false;
   let speedDragging = false;
+  const calCorners = ['front-left', 'front-right', 'rear-left', 'rear-right'];
+  const calCorner = [null, null, null, null]; // per motor slot; null = not yet labelled
+  const calInverted = [false, false, false, false];
+  let calSyncedFromServer = false;
 
   // Distinguishes "server responded with an error" (show its message) from
   // a network failure (show the generic disconnected state).
@@ -255,6 +348,7 @@ const char kControlPage[] PROGMEM = R"HTML(
     reset.hidden = !data.estop;
     renderAttitude(data);
     renderTelemetry(data);
+    renderCalibration(data);
   }
 
   function formatUptime(ms) {
@@ -290,6 +384,43 @@ const char kControlPage[] PROGMEM = R"HTML(
         card.classList.remove('motor-in', 'motor-out', 'motor-stopped');
         card.classList.add(cls);
       }
+    }
+  }
+
+  function updateCalUi() {
+    for (let slot = 0; slot < 4; slot++) {
+      document.querySelectorAll(`[data-cal-corner-group="${slot}"] [data-corner]`).forEach(button => {
+        button.classList.toggle('selected', calCorner[slot] === button.dataset.corner);
+      });
+      const invertButton = document.querySelector(`[data-cal-invert="${slot}"]`);
+      invertButton.textContent = `INVERT: ${calInverted[slot] ? 'ON' : 'OFF'}`;
+      invertButton.classList.toggle('active', calInverted[slot]);
+    }
+    document.querySelector('#cal-save').disabled = calCorner.some(corner => corner === null);
+  }
+
+  function setCalCorner(slot, corner) {
+    for (let i = 0; i < 4; i++) if (i !== slot && calCorner[i] === corner) calCorner[i] = null;
+    calCorner[slot] = corner;
+    updateCalUi();
+  }
+
+  function renderCalibration(data) {
+    if (Array.isArray(data.calibration) && !calSyncedFromServer) {
+      data.calibration.forEach((slot, index) => {
+        calCorner[index] = slot.corner;
+        calInverted[index] = !!slot.inverted;
+      });
+      calSyncedFromServer = true;
+      updateCalUi();
+    }
+    const spinningSlot = Number.isInteger(data.calibrationSlot) ? data.calibrationSlot : -1;
+    for (let slot = 0; slot < 4; slot++) {
+      const card = document.querySelector(`[data-cal-slot-card="${slot}"]`);
+      const status = document.querySelector(`[data-cal-status="${slot}"]`);
+      const spinning = slot === spinningSlot;
+      card.classList.toggle('spinning', spinning);
+      status.textContent = spinning ? `SPINNING · ${data.calibrationDirection === 'payout' ? 'OUT' : 'IN'}` : '';
     }
   }
 
@@ -407,20 +538,26 @@ const char kControlPage[] PROGMEM = R"HTML(
     state.textContent = `JOYSTICK  X ${joystickX} · Y ${joystickY}`;
   }
 
-  document.querySelectorAll('[data-motion]').forEach(button => {
-    button.addEventListener('pointerdown', event => {
-      event.preventDefault();
-      endMotion();
-      heldMotion = button.dataset.motion;
-      button.classList.add('active');
-      button.setPointerCapture(event.pointerId);
-      post('/api/move', 'direction=' + encodeURIComponent(heldMotion));
-      heartbeat = setInterval(() => heldMotion && post('/api/move', 'direction=' + encodeURIComponent(heldMotion)), 250);
+  function bindHold(selector, buildRequest) {
+    document.querySelectorAll(selector).forEach(button => {
+      const send = () => post(...buildRequest(button));
+      button.addEventListener('pointerdown', event => {
+        event.preventDefault();
+        endMotion();
+        heldMotion = true;
+        button.classList.add('active');
+        button.setPointerCapture(event.pointerId);
+        send();
+        heartbeat = setInterval(send, 250);
+      });
+      button.addEventListener('pointerup', endMotion);
+      button.addEventListener('pointercancel', endMotion);
+      button.addEventListener('lostpointercapture', endMotion);
     });
-    button.addEventListener('pointerup', endMotion);
-    button.addEventListener('pointercancel', endMotion);
-    button.addEventListener('lostpointercapture', endMotion);
-  });
+  }
+
+  bindHold('[data-motion]', button => ['/api/move', 'direction=' + encodeURIComponent(button.dataset.motion)]);
+  bindHold('[data-cal-dir]', button => ['/api/calibration/spin', `slot=${button.dataset.calSlot}&direction=${button.dataset.calDir}`]);
 
   document.querySelectorAll('[data-tab]').forEach(tab => {
     tab.addEventListener('click', () => {
@@ -428,12 +565,51 @@ const char kControlPage[] PROGMEM = R"HTML(
       const selected = tab.dataset.tab;
       document.querySelector('#drive-controls').hidden = selected !== 'drive';
       document.querySelector('#winch-controls').hidden = selected !== 'winches';
+      document.querySelector('#calibration-controls').hidden = selected !== 'calibration';
       document.querySelectorAll('[data-tab]').forEach(item => {
         const active = item === tab;
         item.classList.toggle('selected', active);
         item.setAttribute('aria-selected', active ? 'true' : 'false');
       });
     });
+  });
+
+  document.querySelectorAll('[data-cal-corner-group]').forEach(group => {
+    const slot = Number(group.dataset.calCornerGroup);
+    group.querySelectorAll('[data-corner]').forEach(button => {
+      button.addEventListener('click', () => setCalCorner(slot, button.dataset.corner));
+    });
+  });
+
+  document.querySelectorAll('[data-cal-invert]').forEach(button => {
+    const slot = Number(button.dataset.calInvert);
+    button.addEventListener('click', () => {
+      calInverted[slot] = !calInverted[slot];
+      updateCalUi();
+    });
+  });
+
+  document.querySelector('#cal-save').addEventListener('click', async () => {
+    const message = document.querySelector('#cal-message');
+    if (calCorner.some(corner => corner === null)) {
+      message.textContent = 'Label all four motors before saving.';
+      return;
+    }
+    const params = new URLSearchParams();
+    calCorner.forEach((corner, slot) => {
+      params.set(`slot${slot}corner`, corner);
+      params.set(`slot${slot}inverted`, calInverted[slot] ? '1' : '0');
+    });
+    message.textContent = 'Saving…';
+    const ok = await post('/api/calibration/save', params.toString());
+    message.textContent = ok ? 'Calibration saved.' : 'Save failed — each corner must be used exactly once.';
+  });
+
+  document.querySelector('#cal-reset').addEventListener('click', async () => {
+    const message = document.querySelector('#cal-message');
+    calSyncedFromServer = false;
+    const ok = await post('/api/calibration/reset');
+    message.textContent = ok ? 'Calibration reset to default wiring order.' : 'Reset failed.';
   });
 
   joystick.addEventListener('pointerdown', event => {
