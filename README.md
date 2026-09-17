@@ -17,16 +17,18 @@ The MPU6050 can indicate short **RISING**, **FALLING**, and **STEADY** movements
 
 ## Complete signal wiring
 
-Use the GPIO numbers printed below, not a board vendor's `D` numbers. Each corner winch is one 60 RPM N20 gear motor with a 3D-printed pulley spooling fishing line to a fixed anchor point in that corner's direction. Two dual-channel L9110S boards drive all four corner winches; there is no separate propulsion motor set. Pin numbers below are for the standard ESP32 (`esp32-hardware`); see `include/config.h` for the placeholder ESP32-S3 map.
+Use the GPIO numbers printed below, not a board vendor's `D` numbers. Each corner winch is one 60 RPM N20 gear motor with a 3D-printed pulley spooling fishing line to a fixed anchor point in that corner's direction. Each winch has its own single-channel DRV8871 H-bridge module (four installed, one spare from the 5-pack); there is no separate propulsion motor set. Pin numbers below are for the standard ESP32 (`esp32-hardware`); see `include/config.h` for the placeholder ESP32-S3 map.
 
 The four rows below are labelled "Motor 1"–"Motor 4" rather than by corner on purpose: which corner each one actually drives, and whether it needs to spin inverted, is **not** set in firmware. Wire them in whatever order is physically convenient, then use the phone UI's **CALIBRATE** tab to spin each motor and tell the controller which corner it is — see "Motor calibration" below.
 
 | Device | Terminal | Standard ESP32 |
 |---|---|---:|
-| L9110S board 1, channel A (Motor 1) | `A-IA`, `A-IB` | GPIO `13`, GPIO `14` |
-| L9110S board 1, channel B (Motor 2) | `B-IA`, `B-IB` | GPIO `16`, GPIO `17` |
-| L9110S board 2, channel A (Motor 3) | `A-IA`, `A-IB` | GPIO `18`, GPIO `19` |
-| L9110S board 2, channel B (Motor 4) | `B-IA`, `B-IB` | GPIO `25`, GPIO `26` |
+| DRV8871 #1 (Motor 1) | `IN1`, `IN2` | GPIO `13`, GPIO `14` |
+| DRV8871 #2 (Motor 2) | `IN1`, `IN2` | GPIO `16`, GPIO `17` |
+| DRV8871 #3 (Motor 3) | `IN1`, `IN2` | GPIO `18`, GPIO `19` |
+| DRV8871 #4 (Motor 4) | `IN1`, `IN2` | GPIO `25`, GPIO `26` |
+| DRV8871 #1–#4 | logic `GND` | ESP32 `GND` (common ground) |
+| DRV8871 #1–#4 | `OUT1`, `OUT2` | That module's N20 motor only |
 | GY-521 (MPU6050) | `SDA`, `SCL` | GPIO `21`, GPIO `22` |
 | GY-521 (MPU6050) | `VCC`, `GND` | `3V3`, `GND` |
 | GY-521 (MPU6050) | `XDA`, `XCL`, `AD0`, `INT` | Not connected |
@@ -34,10 +36,11 @@ The four rows below are labelled "Motor 1"–"Motor 4" rather than by corner on 
 ```text
 STANDARD ESP32                    SIGNAL CONNECTIONS
 
-GPIO 13, 14  ------------------> L9110S #1 channel A (A-IA/A-IB) --> Motor 1
-GPIO 16, 17  ------------------> L9110S #1 channel B (B-IA/B-IB) --> Motor 2
-GPIO 18, 19  ------------------> L9110S #2 channel A (A-IA/A-IB) --> Motor 3
-GPIO 25, 26  ------------------> L9110S #2 channel B (B-IA/B-IB) --> Motor 4
+GPIO 13, 14  ------------------> DRV8871 #1 IN1/IN2 --> OUT1/OUT2 --> Motor 1
+GPIO 16, 17  ------------------> DRV8871 #2 IN1/IN2 --> OUT1/OUT2 --> Motor 2
+GPIO 18, 19  ------------------> DRV8871 #3 IN1/IN2 --> OUT1/OUT2 --> Motor 3
+GPIO 25, 26  ------------------> DRV8871 #4 IN1/IN2 --> OUT1/OUT2 --> Motor 4
+GND          ------------------> DRV8871 #1-#4 GND
 GPIO 21      ------------------> GY-521 SDA
 GPIO 22      ------------------> GY-521 SCL
 3V3          ------------------> GY-521 VCC
@@ -46,11 +49,28 @@ GND          ------------------> GY-521 GND
 
 Do not use GPIO 6-11 on the standard ESP32: they are tied to the module's internal flash interface.
 
-Connect each motor only to its driver's matching output pair (`A-OA/A-OB` or `B-OA/B-OB`). Fit a 10 kΩ pull-down resistor between every L9110S input and ground so the motors remain off while the ESP32 starts.
+Connect each motor only to its own module's `OUT1`/`OUT2` terminals. Never parallel two DRV8871 outputs or share one motor between modules. The DRV8871 has no separate logic-supply pin: it runs from its motor supply (`VM`) and accepts the ESP32's 3.3 V logic directly, referenced to the shared `GND`. Terminal names vary slightly between module vendors (e.g. `VM`/`+`, `GND`/`-`), so check the silkscreen on your module.
+
+### DRV8871 control behaviour
+
+The firmware drives each module according to the DRV8871 datasheet truth table:
+
+| `IN1` | `IN2` | Motor outputs | Firmware use |
+|:---:|:---:|---|---|
+| 0 | 0 | Both Hi-Z: coast; the chip sleeps after about 1 ms | **STOP**, E-stop, dead-man timeout, startup |
+| PWM | 0 | Forward (`OUT1`→`OUT2`), coasting during PWM off-time | Positive power (IN / retrieve before inversion) |
+| 0 | PWM | Reverse (`OUT2`→`OUT1`), coasting during PWM off-time | Negative power (OUT / payout before inversion) |
+| 1 | 1 | Both low: brake | **Not used** |
+
+PWM is 20 kHz, 8-bit, on one input at a time. A calibrated **INVERT** simply swaps which input carries the PWM. STOP deliberately coasts rather than brakes, so a software stop matches what the modules do when the ESP32 is resetting or unpowered (both inputs read LOW).
+
+**Pull-downs:** the DRV8871 has internal pull-down resistors on `IN1` and `IN2` (about 100 kΩ per the datasheet), so an unpowered, resetting, or not-yet-configured ESP32 leaves each module in the coast state without extra parts. The 10 kΩ external pull-downs the old driver boards needed are therefore **not required**. They remain optional and harmless (about 0.33 mA at 3.3 V) if you want extra noise immunity on long signal leads near the motor wiring; some modules already fit them, so check before adding more. Note that no pull-down can stop an ESP32 pin that the chip itself briefly drives during boot. GPIO 14 (Motor 1 `IN2`) is known to output a short signal at boot on some ESP32 modules, so Motor 1 may twitch briefly on reset. This is why motor power should be off or E-stopped while flashing or resetting.
+
+**Current rating:** treat the DRV8871 as a roughly 3.6 A peak-class driver (TI datasheet), not the "10 A" figure some sellers quote. The actual usable current depends on the module's current-limit resistor (`ILIM`; the datasheet gives I<sub>TRIP</sub> ≈ 64 / R<sub>ILIM</sub> in kΩ), its PCB copper, and temperature. It also has built-in over-current, over-temperature, and under-voltage protection. The driver's headroom is **not** permission for the motors to draw more: the whole prototype must still stay within the 12 V / 2 A limit below.
 
 ### Motor calibration
 
-Because Motor 1–4 above are just wiring positions, first power-up (or any time a winch gets re-plugged into a different driver channel) needs a short calibration pass from the phone, not a firmware change:
+Because Motor 1–4 above are just wiring positions, first power-up (or any time a winch gets re-plugged into a different DRV8871) needs a short calibration pass from the phone, not a firmware change:
 
 1. Open the **CALIBRATE** tab.
 2. For each of the four motor cards, hold **OUT** or **IN** — it spins only that one physical motor, at a fixed gentle speed independent of the drive speed slider — and watch which corner of the prototype actually moves.
@@ -65,29 +85,34 @@ Mount the GY-521 rigidly above the water line, component side upward. Power it f
 
 The ESP32 and every motor driver must share ground, but the ESP32 must receive regulated 5 V (or, on the current bench test, USB power only) — never the raw motor supply.
 
-**Current temporary bench test wiring** (no fuse yet): an 8xAA battery holder feeds a female XT30 pigtail, which mates to a male XT30 pigtail on the harness. Male XT30 red/black go to a positive/negative Wago each; the positive Wago feeds `VCC` on both L9110S boards, the negative Wago feeds `GND` on both. ESP32 `GND` shares that same negative rail. The ESP32 itself is powered only through USB, separately from the AA pack. Because there is no fuse in this temporary setup, keep first tests brief, supervised, and one motor at a time — see the first-power procedure below.
+**Current temporary bench test wiring** (no fuse yet): an 8xAA battery holder feeds a female XT30 pigtail, which mates to a male XT30 pigtail on the harness. Male XT30 red/black go to a positive/negative Wago each; the positive Wago feeds `VM` (motor supply +) on all four DRV8871 modules, and the negative Wago feeds `GND` on all four. ESP32 `GND` shares that same negative rail. The ESP32 itself is powered only through USB, separately from the AA pack. Because there is no fuse in this temporary setup, keep first tests brief, supervised, and one motor at a time — see the first-power procedure below.
 
-**Final prototype wiring** (not yet built): a fixed 12 V / 2 A supply through XT30, fused, feeding the L9110S boards, with a separate 5 V buck converter powering the ESP32 from the same 12 V rail and common ground throughout.
+**Final prototype wiring** (not yet built): a fixed 12 V / 2 A supply through XT30, fused, feeding the `VM` terminals of all four DRV8871 modules through the master switch and normally-closed motor E-stop, with a separate 5 V buck converter powering the ESP32 from the same 12 V rail and common ground throughout. The DRV8871 operates from 6.5 V to 45 V, so a nominal 12 V rail (including a supply sitting slightly above 12 V) is well within its range.
 
 ```text
 SUPPLIED 12 V / 2 A  (final prototype; bench test uses 8xAA instead, no fuse yet)
         +
         +---- 2 A fuse ---- master switch ---- normally-closed motor E-STOP ----+
         |                                                                    |
-        |                                                                    +--> L9110S #1 VCC
-        |                                                                    +--> L9110S #2 VCC
+        |                                                                    +--> DRV8871 #1 VM
+        |                                                                    +--> DRV8871 #2 VM
+        |                                                                    +--> DRV8871 #3 VM
+        |                                                                    +--> DRV8871 #4 VM
         |
         +---- fused branch ---- 12 V to regulated 5 V buck converter --------+--> ESP32 5V/VIN
 
 SUPPLY NEGATIVE -------------------------------------------------------------+--> ESP32 GND
-                                                                             +--> all L9110S GND
+                                                                             +--> DRV8871 #1 GND
+                                                                             +--> DRV8871 #2 GND
+                                                                             +--> DRV8871 #3 GND
+                                                                             +--> DRV8871 #4 GND
                                                                              +--> buck converter GND
 
 ESP32 3V3 ----------------------------------------------------------------------> GY-521 VCC
 ESP32 GND ----------------------------------------------------------------------> GY-521 GND
 ```
 
-Never connect 12 V (or the AA pack) to an ESP32 GPIO, `3V3`, `5V`, or USB pin. Select drivers and wiring for each motor's stall current. The four corner winches, ESP32, sensor, and converter together must remain within the project-wide 12 V / 2 A limit. Check the worst-case current before putting the prototype in water.
+Never connect 12 V (or the AA pack) to an ESP32 GPIO, `3V3`, `5V`, or USB pin, and never to a DRV8871 `IN1`/`IN2`. Size the wiring for each motor's stall current. The four corner winches, ESP32, sensor, and converter together must remain within the project-wide 12 V / 2 A limit. Check the worst-case current before putting the prototype in water.
 
 ## Build and upload
 
@@ -96,7 +121,7 @@ Four PlatformIO environments are defined in `platformio.ini`:
 | Environment | Board | `TEST_MODE` | Use |
 |---|---|---|---|
 | `esp32-test` (default) | Standard ESP32 | 1 | Hardware-free; motors and MPU6050 simulated |
-| `esp32-hardware` | Standard ESP32 | 0 | The board currently on the bench, physical L9110S + optional GY-521 |
+| `esp32-hardware` | Standard ESP32 | 0 | The board currently on the bench, four physical DRV8871 modules + optional GY-521 |
 | `esp32-s3-test` | ESP32-S3 N16R8 | 1 | Future board, hardware-free |
 | `esp32-s3-hardware` | ESP32-S3 N16R8 | 0 | Future board; GPIO map in `config.h` is a placeholder, not yet wired |
 
@@ -114,7 +139,19 @@ PLATFORMIO_CORE_DIR=.platformio .venv/bin/pio run -e esp32-hardware -t upload
 PLATFORMIO_CORE_DIR=.platformio .venv/bin/pio device monitor -e esp32-hardware
 ```
 
-At startup the serial monitor reports the firmware mode, board type, all 8 motor pin assignments (with any configured inversion), the MPU6050 detection result, the Wi-Fi SSID/password, the IP address, emergency-stop state, and a confirmation that all motors are STOPPED.
+At startup the serial monitor reports the firmware mode, board type, all 8 motor pin assignments (as DRV8871 #1–#4 `IN1`/`IN2`), the saved slot→corner calibration and inversion, the MPU6050 detection result, the Wi-Fi SSID/password, the IP address, emergency-stop state, and a confirmation that all motors are STOPPED.
+
+## First power-up and hardware test
+
+Use this order after first wiring the DRV8871 modules, and after any rewiring:
+
+1. **Unpowered checks.** With the XT30 motor supply disconnected and USB unplugged, confirm continuity from supply negative to every DRV8871 `GND`, the buck converter `GND`, and ESP32 `GND`. Confirm no continuity between the motor supply positive and ESP32 `3V3`, `5V`/`VIN`, or any GPIO. Confirm each motor is on its own module's `OUT1`/`OUT2`, and that `VM`/`GND` polarity on every module is correct: reversed supply polarity can destroy the DRV8871.
+2. **Logic only.** Power the ESP32 alone (USB), with motor power still disconnected. Upload `esp32-hardware`, open the serial monitor, and check it reports `IN1`/`IN2` GPIO 13/14, 16/17, 18/19, 25/26 for Motor 1–4 and that all motors are STOPPED.
+3. **Check the stopped state.** With motor power still disconnected, measure each `IN1`/`IN2` to `GND`. All eight should read about 0 V.
+4. **Motor power, supervised.** Support the prototype so no winch is loaded, fit the lines loose or off, keep a hand on the master switch/E-stop, then connect motor power. No motor should move. If any does, switch off immediately and recheck wiring.
+5. **One motor at a time.** On the **CALIBRATE** tab, briefly hold **OUT** then **IN** on each motor card. Only that one motor should turn, in both directions. Label its corner and set **INVERT** as needed, then **SAVE CALIBRATION**.
+6. **Check stopping.** While holding a control, test that each of these stops the motor: releasing the button, **STOP**, **EMERGENCY STOP** (motors stay stopped after **CLEAR E-STOP**), turning off the phone's Wi-Fi (connection-loss and dead-man stop), and opening the physical motor E-stop.
+7. **Speed and current.** On the **WINCHES** tab, check each corner at low and then higher speed. Measure supply current with all four winches running and while one is briefly stalled, and confirm the whole system stays within 12 V / 2 A. Check that no DRV8871 module gets hot.
 
 ## Operating instructions
 
@@ -122,7 +159,7 @@ At startup the serial monitor reports the firmware mode, board type, all 8 motor
 2. Join `ENGG1100-Lavender` on the iPhone using password `station1100`. Accept the no-internet warning and stay connected.
 3. Open `http://192.168.4.1/`. Confirm **ONLINE** and **HARDWARE**; **TEST MODE** means motor outputs are simulated.
 4. Float the house level and stationary, then press **SET LEVEL**. Nose-up pitch now reads positive.
-5. Use the **SPEED** slider to set the commanded motor speed (starts at 20%, capped at the configured maximum of 35% for first bench testing).
+5. Use the **SPEED** slider to set the commanded motor speed (20–100%, default 80%). The last setting is saved to flash and restored after a reboot. For first bench tests, lower it before driving.
 6. Select **DRIVE**. Hold and drag the joystick to pull the house across the water: each corner winch retrieves or pays out its tether to produce the requested direction. Release the joystick to stop. Hold either rotate button to turn in place via diagonal corner pairs. The four motor-status cards show each corner's live commanded direction (IN / OUT / STOPPED) and power.
 7. Select **WINCHES**. Hold **ALL OUT** as water rises and the tethers become tight. Hold **ALL IN** as water falls to remove slack without pulling the house down. Use the FL/FR/RL/RR controls to correct a single corner with unequal rope length, and to test each motor independently on first power-up.
 8. Treat ↑ **RISING**, ↓ **FALLING**, and ● **STEADY** as short-term motion guidance only. Rocking, driving, or abrupt tilting can affect the estimate.

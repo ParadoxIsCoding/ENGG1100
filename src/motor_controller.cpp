@@ -39,8 +39,29 @@ constexpr char kSettingsNamespace[] = "settings";
 constexpr char kSpeedKey[] = "speed";
 
 #if !TEST_MODE
-constexpr uint8_t kSlotAChannel[MotorController::kSlotCount] = {0, 2, 4, 6};
-constexpr uint8_t kSlotBChannel[MotorController::kSlotCount] = {1, 3, 5, 7};
+// One LEDC channel per DRV8871 input: slot i's IN1 and IN2 each get their own
+// channel so either input can carry PWM.
+constexpr uint8_t kSlotIn1Channel[MotorController::kSlotCount] = {0, 2, 4, 6};
+constexpr uint8_t kSlotIn2Channel[MotorController::kSlotCount] = {1, 3, 5, 7};
+
+// DRV8871 input truth table (TI datasheet, SLVSCY9):
+//   IN1 IN2 | OUT1 OUT2 | Result
+//    0   0  |  Hi-Z Hi-Z | Coast; device sleeps after ~1 ms
+//    0   1  |  L    H    | Reverse (OUT2 -> OUT1)
+//    1   0  |  H    L    | Forward (OUT1 -> OUT2)
+//    1   1  |  L    L    | Brake (low-side slow decay)
+//
+// This firmware uses "fast decay" PWM: one input carries the PWM duty and the
+// other is held LOW, so the PWM off-time is 0/0 (coast). STOP is therefore
+// IN1=IN2=LOW (coast/sleep), never 1/1 brake. That keeps the stopped state
+// identical to what an unpowered or resetting ESP32 produces (the DRV8871's
+// internal input pull-downs read both inputs LOW), so software STOP, E-stop,
+// the dead-man timeout and a controller reset all leave the bridge in the
+// same coasting state.
+void writeInputs(uint8_t slot, uint32_t in1Duty, uint32_t in2Duty) {
+  ledcWrite(kSlotIn1Channel[slot], in1Duty);
+  ledcWrite(kSlotIn2Channel[slot], in2Duty);
+}
 
 void prepareStoppedOutput(uint8_t pin) {
   // Set the output latch LOW before enabling the output driver.
@@ -182,10 +203,11 @@ void MotorController::begin() {
   Serial.println("[motors] TEST_MODE: GPIO outputs are not enabled");
 #else
   for (uint8_t i = 0; i < kSlotCount; ++i) {
-    preparePwmOutput(kSlotPins[i].a, kSlotAChannel[i]);
-    preparePwmOutput(kSlotPins[i].b, kSlotBChannel[i]);
+    preparePwmOutput(kSlotPins[i].a, kSlotIn1Channel[i]);
+    preparePwmOutput(kSlotPins[i].b, kSlotIn2Channel[i]);
   }
-  Serial.println("[motors] Hardware GPIO enabled; all outputs LOW");
+  Serial.println(
+      "[motors] Hardware GPIO enabled; all DRV8871 IN1/IN2 LOW (coast)");
 #endif
   stop();
 }
@@ -200,11 +222,18 @@ void MotorController::drive(uint8_t slot, int16_t powerPercent) {
 #if TEST_MODE
   (void)powerPercent;
 #else
+  // maxDuty (all bits set) is treated by the Arduino-ESP32 LEDC driver as a
+  // constant-HIGH output, so 100% really is IN=1 with no off pulses.
   const uint32_t maxDuty = (1UL << Config::kMotorPwmResolutionBits) - 1;
   const uint32_t duty =
       static_cast<uint32_t>(abs(powerPercent)) * maxDuty / 100;
-  ledcWrite(kSlotAChannel[slot], powerPercent > 0 ? duty : 0);
-  ledcWrite(kSlotBChannel[slot], powerPercent < 0 ? duty : 0);
+  if (powerPercent > 0) {
+    writeInputs(slot, duty, 0);  // Forward: IN1 = PWM, IN2 = LOW.
+  } else if (powerPercent < 0) {
+    writeInputs(slot, 0, duty);  // Reverse: IN1 = LOW, IN2 = PWM.
+  } else {
+    writeInputs(slot, 0, 0);     // Stop: IN1 = IN2 = LOW (coast).
+  }
 #endif
 }
 
@@ -238,8 +267,9 @@ void MotorController::driveCorner(Corner corner, int16_t powerPercent) {
 
 void MotorController::stopAllChannels() {
   // Stop every physical slot directly (not via the corner mapping) before
-  // changing direction, to avoid shoot-through and sudden opposite-direction
-  // transitions even if the mapping is mid-calibration.
+  // changing direction, so no slot ever goes straight from one PWM input to
+  // the other and every slot is left coasting even if the mapping is
+  // mid-calibration. (The DRV8871 also prevents shoot-through internally.)
   for (uint8_t i = 0; i < kSlotCount; ++i) drive(i, 0);
   frontLeftPower_ = 0;
   frontRightPower_ = 0;
@@ -399,7 +429,7 @@ void MotorController::applyJoystick(int8_t xPercent, int8_t yPercent) {
   rearLeft = static_cast<int16_t>(lroundf(rearLeft * speedScale));
   rearRight = static_cast<int16_t>(lroundf(rearRight * speedScale));
 
-  // Briefly stop every H-bridge input before applying a changed mix.
+  // Briefly return every DRV8871 to IN1=IN2=LOW before applying a changed mix.
   stopAllChannels();
   driveCorner(Corner::FrontLeft, frontLeft);
   driveCorner(Corner::FrontRight, frontRight);

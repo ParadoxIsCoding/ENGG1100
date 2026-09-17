@@ -36,6 +36,8 @@ enum class Corner : uint8_t {
 
 class MotorController {
  public:
+  // One DRV8871 per slot: a -> the driver's IN1, b -> its IN2.
+  // Positive power drives IN1 with PWM, negative drives IN2 (see drive()).
   struct MotorPins {
     uint8_t a;
     uint8_t b;

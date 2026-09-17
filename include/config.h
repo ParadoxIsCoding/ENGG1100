@@ -20,6 +20,8 @@ constexpr uint16_t kHttpPort = 80;
 constexpr uint32_t kDeadmanTimeoutMs = 600;
 constexpr uint32_t kMotorMutexTimeoutMs = 50;
 constexpr uint8_t kJoystickDeadZonePercent = 12;
+// PWM applied to one DRV8871 input at a time (the other held LOW). 20 kHz is
+// above audible range; 8-bit duty is well within the ESP32 LEDC limit there.
 constexpr uint16_t kMotorPwmFrequencyHz = 20000;
 constexpr uint8_t kMotorPwmResolutionBits = 8;
 
@@ -65,17 +67,20 @@ constexpr uint8_t kI2cScl = 22;
 // corner each slot actually drives (and whether it needs to spin inverted)
 // is a runtime mapping assigned from the web UI's calibration tab and
 // stored in flash (see MotorController::loadCalibrationFromStorage). Swapping
-// which winch is plugged into which driver channel no longer needs a
-// firmware change, just re-running calibration.
+// which winch is plugged into which DRV8871 no longer needs a firmware
+// change, just re-running calibration.
+//
+// Each motor has its own single-channel DRV8871 module. "PinA" goes to that
+// module's IN1 and "PinB" to its IN2; the module's OUT1/OUT2 go to the motor.
 // ------------------------------------------------------------------------
-constexpr uint8_t kMotor1PinA = 13;  // L9110S #1, A-IA
-constexpr uint8_t kMotor1PinB = 14;  // L9110S #1, A-IB
-constexpr uint8_t kMotor2PinA = 16;  // L9110S #1, B-IA
-constexpr uint8_t kMotor2PinB = 17;  // L9110S #1, B-IB
-constexpr uint8_t kMotor3PinA = 18;  // L9110S #2, A-IA
-constexpr uint8_t kMotor3PinB = 19;  // L9110S #2, A-IB
-constexpr uint8_t kMotor4PinA = 25;  // L9110S #2, B-IA
-constexpr uint8_t kMotor4PinB = 26;  // L9110S #2, B-IB
+constexpr uint8_t kMotor1PinA = 13;  // DRV8871 #1, IN1
+constexpr uint8_t kMotor1PinB = 14;  // DRV8871 #1, IN2
+constexpr uint8_t kMotor2PinA = 16;  // DRV8871 #2, IN1
+constexpr uint8_t kMotor2PinB = 17;  // DRV8871 #2, IN2
+constexpr uint8_t kMotor3PinA = 18;  // DRV8871 #3, IN1
+constexpr uint8_t kMotor3PinB = 19;  // DRV8871 #3, IN2
+constexpr uint8_t kMotor4PinA = 25;  // DRV8871 #4, IN1
+constexpr uint8_t kMotor4PinB = 26;  // DRV8871 #4, IN2
 
 constexpr uint8_t kI2cSda = 21;  // GY-521 SDA
 constexpr uint8_t kI2cScl = 22;  // GY-521 SCL

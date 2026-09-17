@@ -450,14 +450,14 @@ void configureServer() {
 
 void printPinAssignments() {
   Serial.println("Motor pin assignments (GPIO):");
-  Serial.printf("  Motor 1: A=%u B=%u\n", Config::kMotor1PinA,
-                Config::kMotor1PinB);
-  Serial.printf("  Motor 2: A=%u B=%u\n", Config::kMotor2PinA,
-                Config::kMotor2PinB);
-  Serial.printf("  Motor 3: A=%u B=%u\n", Config::kMotor3PinA,
-                Config::kMotor3PinB);
-  Serial.printf("  Motor 4: A=%u B=%u\n", Config::kMotor4PinA,
-                Config::kMotor4PinB);
+  Serial.printf("  Motor 1 (DRV8871 #1): IN1=%u IN2=%u\n",
+                Config::kMotor1PinA, Config::kMotor1PinB);
+  Serial.printf("  Motor 2 (DRV8871 #2): IN1=%u IN2=%u\n",
+                Config::kMotor2PinA, Config::kMotor2PinB);
+  Serial.printf("  Motor 3 (DRV8871 #3): IN1=%u IN2=%u\n",
+                Config::kMotor3PinA, Config::kMotor3PinB);
+  Serial.printf("  Motor 4 (DRV8871 #4): IN1=%u IN2=%u\n",
+                Config::kMotor4PinA, Config::kMotor4PinB);
   Serial.printf("  I2C: SDA=%u SCL=%u\n", Config::kI2cSda, Config::kI2cScl);
   Serial.println(
       "  Which corner each motor drives is set from the web UI's "
@@ -474,8 +474,9 @@ void setup() {
   // of steps 6-8 run.
   Serial.begin(115200);
 
-  motors.begin();  // Configures all 8 motor GPIOs as outputs, forces them
-                    // LOW, and sets the internal motor state to STOPPED.
+  motors.begin();  // Configures all 8 DRV8871 IN1/IN2 GPIOs as outputs,
+                    // forces them LOW (coast), and sets the internal motor
+                    // state to STOPPED.
 
   motorMutex = xSemaphoreCreateMutex();
   if (motorMutex == nullptr ||
