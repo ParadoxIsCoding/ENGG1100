@@ -26,7 +26,7 @@ The four rows below are labelled "Motor 1"–"Motor 4" rather than by corner on 
 | DRV8871 #1 (Motor 1) | `IN1`, `IN2` | GPIO `13`, GPIO `14` |
 | DRV8871 #2 (Motor 2) | `IN1`, `IN2` | GPIO `16`, GPIO `17` |
 | DRV8871 #3 (Motor 3) | `IN1`, `IN2` | GPIO `18`, GPIO `19` |
-| DRV8871 #4 (Motor 4) | `IN1`, `IN2` | GPIO `25`, GPIO `26` |
+| DRV8871 #4 (Motor 4) | `IN1`, `IN2` | GPIO `32`, GPIO `33` |
 | DRV8871 #1–#4 | logic `GND` | ESP32 `GND` (common ground) |
 | DRV8871 #1–#4 | `OUT1`, `OUT2` | That module's N20 motor only |
 | GY-521 (MPU6050) | `SDA`, `SCL` | GPIO `21`, GPIO `22` |
@@ -39,7 +39,7 @@ STANDARD ESP32                    SIGNAL CONNECTIONS
 GPIO 13, 14  ------------------> DRV8871 #1 IN1/IN2 --> OUT1/OUT2 --> Motor 1
 GPIO 16, 17  ------------------> DRV8871 #2 IN1/IN2 --> OUT1/OUT2 --> Motor 2
 GPIO 18, 19  ------------------> DRV8871 #3 IN1/IN2 --> OUT1/OUT2 --> Motor 3
-GPIO 25, 26  ------------------> DRV8871 #4 IN1/IN2 --> OUT1/OUT2 --> Motor 4
+GPIO 32, 33  ------------------> DRV8871 #4 IN1/IN2 --> OUT1/OUT2 --> Motor 4
 GND          ------------------> DRV8871 #1-#4 GND
 GPIO 21      ------------------> GY-521 SDA
 GPIO 22      ------------------> GY-521 SCL
@@ -48,6 +48,8 @@ GND          ------------------> GY-521 GND
 ```
 
 Do not use GPIO 6-11 on the standard ESP32: they are tied to the module's internal flash interface.
+
+Motor 4 was moved from GPIO 25/26 to GPIO 32/33 after one of the original pins held its DRV8871 input HIGH even when stopped (the fault followed the pins across a replacement module). Leave GPIO 25/26 unused.
 
 Connect each motor only to its own module's `OUT1`/`OUT2` terminals. Never parallel two DRV8871 outputs or share one motor between modules. The DRV8871 has no separate logic-supply pin: it runs from its motor supply (`VM`) and accepts the ESP32's 3.3 V logic directly, referenced to the shared `GND`. Terminal names vary slightly between module vendors (e.g. `VM`/`+`, `GND`/`-`), so check the silkscreen on your module.
 
@@ -146,7 +148,7 @@ At startup the serial monitor reports the firmware mode, board type, all 8 motor
 Use this order after first wiring the DRV8871 modules, and after any rewiring:
 
 1. **Unpowered checks.** With the XT30 motor supply disconnected and USB unplugged, confirm continuity from supply negative to every DRV8871 `GND`, the buck converter `GND`, and ESP32 `GND`. Confirm no continuity between the motor supply positive and ESP32 `3V3`, `5V`/`VIN`, or any GPIO. Confirm each motor is on its own module's `OUT1`/`OUT2`, and that `VM`/`GND` polarity on every module is correct: reversed supply polarity can destroy the DRV8871.
-2. **Logic only.** Power the ESP32 alone (USB), with motor power still disconnected. Upload `esp32-hardware`, open the serial monitor, and check it reports `IN1`/`IN2` GPIO 13/14, 16/17, 18/19, 25/26 for Motor 1–4 and that all motors are STOPPED.
+2. **Logic only.** Power the ESP32 alone (USB), with motor power still disconnected. Upload `esp32-hardware`, open the serial monitor, and check it reports `IN1`/`IN2` GPIO 13/14, 16/17, 18/19, 32/33 for Motor 1–4 and that all motors are STOPPED.
 3. **Check the stopped state.** With motor power still disconnected, measure each `IN1`/`IN2` to `GND`. All eight should read about 0 V.
 4. **Motor power, supervised.** Support the prototype so no winch is loaded, fit the lines loose or off, keep a hand on the master switch/E-stop, then connect motor power. No motor should move. If any does, switch off immediately and recheck wiring.
 5. **One motor at a time.** On the **CALIBRATE** tab, briefly hold **OUT** then **IN** on each motor card. Only that one motor should turn, in both directions. Label its corner and set **INVERT** as needed, then **SAVE CALIBRATION**.

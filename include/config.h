@@ -79,8 +79,8 @@ constexpr uint8_t kMotor2PinA = 16;  // DRV8871 #2, IN1
 constexpr uint8_t kMotor2PinB = 17;  // DRV8871 #2, IN2
 constexpr uint8_t kMotor3PinA = 18;  // DRV8871 #3, IN1
 constexpr uint8_t kMotor3PinB = 19;  // DRV8871 #3, IN2
-constexpr uint8_t kMotor4PinA = 25;  // DRV8871 #4, IN1
-constexpr uint8_t kMotor4PinB = 26;  // DRV8871 #4, IN2
+constexpr uint8_t kMotor4PinA = 32;  // DRV8871 #4, IN1 (moved from GPIO 25)
+constexpr uint8_t kMotor4PinB = 33;  // DRV8871 #4, IN2 (moved from GPIO 26)
 
 constexpr uint8_t kI2cSda = 21;  // GY-521 SDA
 constexpr uint8_t kI2cScl = 22;  // GY-521 SCL
