@@ -407,12 +407,13 @@ void MotorController::applyJoystick(int8_t xPercent, int8_t yPercent) {
     return;
   }
 
-  // Holonomic mix: each corner retrieves for the forward/left components of
-  // the requested vector that point toward it, and pays out otherwise.
-  int16_t frontLeft = static_cast<int16_t>(adjustedY) + adjustedX;
-  int16_t frontRight = static_cast<int16_t>(adjustedY) - adjustedX;
-  int16_t rearLeft = -static_cast<int16_t>(adjustedY) + adjustedX;
-  int16_t rearRight = -static_cast<int16_t>(adjustedY) - adjustedX;
+  // Holonomic mix: each corner retrieves for the forward/sideways components
+  // of the requested vector that point toward it, and pays out otherwise.
+  // +X is joystick right, so the right-hand corners retrieve for it.
+  int16_t frontLeft = static_cast<int16_t>(adjustedY) - adjustedX;
+  int16_t frontRight = static_cast<int16_t>(adjustedY) + adjustedX;
+  int16_t rearLeft = -static_cast<int16_t>(adjustedY) - adjustedX;
+  int16_t rearRight = -static_cast<int16_t>(adjustedY) + adjustedX;
   const int16_t peak = max(max(abs(frontLeft), abs(frontRight)),
                             max(abs(rearLeft), abs(rearRight)));
   if (peak > 100) {
