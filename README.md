@@ -23,7 +23,7 @@ The four rows below are labelled "Motor 1"–"Motor 4" rather than by corner on 
 
 | Device | Terminal | Standard ESP32 |
 |---|---|---:|
-| DRV8871 #1 (Motor 1) | `IN1`, `IN2` | GPIO `13`, GPIO `14` |
+| DRV8871 #1 (Motor 1) | `IN1`, `IN2` | GPIO `13`, GPIO `27` |
 | DRV8871 #2 (Motor 2) | `IN1`, `IN2` | GPIO `16`, GPIO `17` |
 | DRV8871 #3 (Motor 3) | `IN1`, `IN2` | GPIO `18`, GPIO `19` |
 | DRV8871 #4 (Motor 4) | `IN1`, `IN2` | GPIO `32`, GPIO `33` |
@@ -36,7 +36,7 @@ The four rows below are labelled "Motor 1"–"Motor 4" rather than by corner on 
 ```text
 STANDARD ESP32                    SIGNAL CONNECTIONS
 
-GPIO 13, 14  ------------------> DRV8871 #1 IN1/IN2 --> OUT1/OUT2 --> Motor 1
+GPIO 13, 27  ------------------> DRV8871 #1 IN1/IN2 --> OUT1/OUT2 --> Motor 1
 GPIO 16, 17  ------------------> DRV8871 #2 IN1/IN2 --> OUT1/OUT2 --> Motor 2
 GPIO 18, 19  ------------------> DRV8871 #3 IN1/IN2 --> OUT1/OUT2 --> Motor 3
 GPIO 32, 33  ------------------> DRV8871 #4 IN1/IN2 --> OUT1/OUT2 --> Motor 4
@@ -50,6 +50,8 @@ GND          ------------------> GY-521 GND
 Do not use GPIO 6-11 on the standard ESP32: they are tied to the module's internal flash interface.
 
 Motor 4 was moved from GPIO 25/26 to GPIO 32/33 after one of the original pins held its DRV8871 input HIGH even when stopped (the fault followed the pins across a replacement module). Leave GPIO 25/26 unused.
+
+Motor 1 `IN2` was moved from GPIO 14 to GPIO 27 because GPIO 14 outputs a signal while the ESP32 boots (before any firmware runs), which spun Motor 1 for about half a second at every power-up or reset. Leave GPIO 14 unused for motor inputs.
 
 Connect each motor only to its own module's `OUT1`/`OUT2` terminals. Never parallel two DRV8871 outputs or share one motor between modules. The DRV8871 has no separate logic-supply pin: it runs from its motor supply (`VM`) and accepts the ESP32's 3.3 V logic directly, referenced to the shared `GND`. Terminal names vary slightly between module vendors (e.g. `VM`/`+`, `GND`/`-`), so check the silkscreen on your module.
 
@@ -66,7 +68,7 @@ The firmware drives each module according to the DRV8871 datasheet truth table:
 
 PWM is 20 kHz, 8-bit, on one input at a time. A calibrated **INVERT** simply swaps which input carries the PWM. STOP deliberately coasts rather than brakes, so a software stop matches what the modules do when the ESP32 is resetting or unpowered (both inputs read LOW).
 
-**Pull-downs:** the DRV8871 has internal pull-down resistors on `IN1` and `IN2` (about 100 kΩ per the datasheet), so an unpowered, resetting, or not-yet-configured ESP32 leaves each module in the coast state without extra parts. The 10 kΩ external pull-downs the old driver boards needed are therefore **not required**. They remain optional and harmless (about 0.33 mA at 3.3 V) if you want extra noise immunity on long signal leads near the motor wiring; some modules already fit them, so check before adding more. Note that no pull-down can stop an ESP32 pin that the chip itself briefly drives during boot. GPIO 14 (Motor 1 `IN2`) is known to output a short signal at boot on some ESP32 modules, so Motor 1 may twitch briefly on reset. This is why motor power should be off or E-stopped while flashing or resetting.
+**Pull-downs:** the DRV8871 has internal pull-down resistors on `IN1` and `IN2` (about 100 kΩ per the datasheet), so an unpowered, resetting, or not-yet-configured ESP32 leaves each module in the coast state without extra parts. The 10 kΩ external pull-downs the old driver boards needed are therefore **not required**. They remain optional and harmless (about 0.33 mA at 3.3 V) if you want extra noise immunity on long signal leads near the motor wiring; some modules already fit them, so check before adding more. Note that no pull-down can stop an ESP32 pin that the chip itself drives during boot, which is why no motor input uses a boot-active pin such as GPIO 14. Keep motor power off or E-stopped while flashing anyway.
 
 **Current rating:** treat the DRV8871 as a roughly 3.6 A peak-class driver (TI datasheet), not the "10 A" figure some sellers quote. The actual usable current depends on the module's current-limit resistor (`ILIM`; the datasheet gives I<sub>TRIP</sub> ≈ 64 / R<sub>ILIM</sub> in kΩ), its PCB copper, and temperature. It also has built-in over-current, over-temperature, and under-voltage protection. The driver's headroom is **not** permission for the motors to draw more: the whole prototype must still stay within the 12 V / 2 A limit below.
 

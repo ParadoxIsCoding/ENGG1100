@@ -74,7 +74,8 @@ constexpr uint8_t kI2cScl = 22;
 // module's IN1 and "PinB" to its IN2; the module's OUT1/OUT2 go to the motor.
 // ------------------------------------------------------------------------
 constexpr uint8_t kMotor1PinA = 13;  // DRV8871 #1, IN1
-constexpr uint8_t kMotor1PinB = 14;  // DRV8871 #1, IN2
+constexpr uint8_t kMotor1PinB = 27;  // DRV8871 #1, IN2 (moved from GPIO 14,
+                                     // which pulses during boot)
 constexpr uint8_t kMotor2PinA = 16;  // DRV8871 #2, IN1
 constexpr uint8_t kMotor2PinB = 17;  // DRV8871 #2, IN2
 constexpr uint8_t kMotor3PinA = 18;  // DRV8871 #3, IN1
