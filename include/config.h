@@ -31,10 +31,12 @@ constexpr uint8_t kMinSpeedPercent = 20;
 constexpr uint8_t kDefaultSpeedPercent = 80;
 constexpr uint8_t kMaxSpeedPercent = 100;
 
-// Fixed, deliberately gentle speed used only by the calibration tab's
+// Fixed speed used only by the calibration tab's
 // hold-to-spin test. Independent of the drive speed slider so identifying a
-// motor never happens at whatever speed drive was last left at.
-constexpr uint8_t kCalibrationSpeedPercent = 15;
+// motor never happens at whatever speed drive was last left at. 15% was too
+// little duty to start an N20 through a DRV8871 in fast-decay (coasting)
+// PWM, so the test spin did nothing; 80% matches the default drive speed.
+constexpr uint8_t kCalibrationSpeedPercent = 80;
 
 #if BOARD_S3
 // ------------------------------------------------------------------------

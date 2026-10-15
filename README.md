@@ -77,7 +77,7 @@ PWM is 20 kHz, 8-bit, on one input at a time. A calibrated **INVERT** simply swa
 Because Motor 1–4 above are just wiring positions, first power-up (or any time a winch gets re-plugged into a different DRV8871) needs a short calibration pass from the phone, not a firmware change:
 
 1. Open the **CALIBRATE** tab.
-2. For each of the four motor cards, hold **OUT** or **IN** — it spins only that one physical motor, at a fixed gentle speed independent of the drive speed slider — and watch which corner of the prototype actually moves.
+2. For each of the four motor cards, hold **OUT** or **IN** — it spins only that one physical motor, at a fixed 80% speed independent of the drive speed slider — and watch which corner of the prototype actually moves.
 3. Tap that corner's button (FL/FR/RL/RR) to label the motor. If it turned the wrong way (paid out on IN, or vice versa), tap **INVERT**.
 4. Repeat for all four motors, then press **SAVE CALIBRATION**. The mapping applies immediately and is written to the ESP32's flash (NVS), so it survives reboots and re-flashing until it's recalibrated. **RESET TO DEFAULT** restores Motor 1→front-left, Motor 2→rear-left, Motor 3→front-right, Motor 4→rear-right, none inverted.
 
