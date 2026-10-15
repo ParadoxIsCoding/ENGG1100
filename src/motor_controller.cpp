@@ -278,7 +278,8 @@ void MotorController::stopAllChannels() {
 }
 
 void MotorController::apply(Motion motion) {
-  if (motion != Motion::Stopped && motion == motion_) {
+  if (motion != Motion::Stopped && motion == motion_ &&
+      speedPercent_ == appliedSpeedPercent_) {
     return;
   }
 
@@ -374,6 +375,7 @@ void MotorController::apply(Motion motion) {
   }
 
   motion_ = motion;
+  appliedSpeedPercent_ = speedPercent_;
   logMotion(motion);
 }
 
@@ -403,7 +405,7 @@ void MotorController::applyJoystick(int8_t xPercent, int8_t yPercent) {
               scaledRadius));
 
   if (motion_ == Motion::Joystick && joystickX_ == adjustedX &&
-      joystickY_ == adjustedY) {
+      joystickY_ == adjustedY && speedPercent_ == appliedSpeedPercent_) {
     return;
   }
 
@@ -440,6 +442,7 @@ void MotorController::applyJoystick(int8_t xPercent, int8_t yPercent) {
   joystickX_ = adjustedX;
   joystickY_ = adjustedY;
   motion_ = Motion::Joystick;
+  appliedSpeedPercent_ = speedPercent_;
   calibrationSlot_ = -1;
   Serial.printf("[motors] joystick x=%d y=%d fl=%d fr=%d rl=%d rr=%d%s\n",
                 adjustedX, adjustedY, frontLeft, frontRight, rearLeft,
@@ -452,12 +455,16 @@ void MotorController::applyJoystick(int8_t xPercent, int8_t yPercent) {
   );
 }
 
-void MotorController::calibrationSpin(uint8_t slot, bool payout) {
+void MotorController::calibrationSpin(uint8_t slot, bool payout,
+                                      bool inverted) {
   if (slot >= kSlotCount) return;
   stopAllChannels();
-  const int16_t power = payout
-                             ? static_cast<int16_t>(-Config::kCalibrationSpeedPercent)
-                             : static_cast<int16_t>(Config::kCalibrationSpeedPercent);
+  int16_t power = payout
+                      ? static_cast<int16_t>(-Config::kCalibrationSpeedPercent)
+                      : static_cast<int16_t>(Config::kCalibrationSpeedPercent);
+  // drive() applies the saved invert flag; cancel it out when the requested
+  // (unsaved) flag differs, so the spin uses the requested one.
+  if (inverted != slots_[slot].inverted) power = static_cast<int16_t>(-power);
   drive(slot, power);
   motion_ = Motion::Calibration;
   joystickX_ = 0;

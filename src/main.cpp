@@ -18,17 +18,21 @@ bool emergencyStopLatched = false;
 volatile bool motionActive = false;
 volatile uint32_t lastValidMotionMs = 0;
 String lastCommandLabel = "none";
-String lastSafetyReason = "none";
+// Written from the safety task and Wi-Fi event task as well as web handlers,
+// so it only ever points at a string literal (a single atomic pointer store)
+// rather than being a String that could be reallocated mid-read.
+const char* volatile lastSafetyReason = "none";
 
 // Takes motorMutex for its scope. Check ok() before touching motor state;
-// on timeout/missing mutex the lock is simply not held.
+// on timeout/missing mutex the lock is simply not held. Safety stops pass
+// portMAX_DELAY so they wait out a slow holder (e.g. a flash write) rather
+// than being skipped.
 class MotorMutexGuard {
  public:
-  MotorMutexGuard()
+  explicit MotorMutexGuard(
+      TickType_t timeout = pdMS_TO_TICKS(Config::kMotorMutexTimeoutMs))
       : locked_(motorMutex != nullptr &&
-                xSemaphoreTake(motorMutex,
-                               pdMS_TO_TICKS(Config::kMotorMutexTimeoutMs)) ==
-                    pdTRUE) {}
+                xSemaphoreTake(motorMutex, timeout) == pdTRUE) {}
   ~MotorMutexGuard() {
     if (locked_) xSemaphoreGive(motorMutex);
   }
@@ -208,7 +212,7 @@ void sendJson(int code, const String& body) {
 
 void stopForSafety(const char* reason) {
   lastSafetyReason = reason;
-  MotorMutexGuard guard;
+  MotorMutexGuard guard(portMAX_DELAY);
   if (!guard.ok()) return;
   const bool wasMoving = motors.motion() != Motion::Stopped;
   motors.stop();
@@ -368,7 +372,13 @@ void handleCalibrationSpin() {
   lastValidMotionMs = millis();
   {
     MotorMutexGuard guard;
-    if (guard.ok()) motors.calibrationSpin(slot, payout);
+    if (guard.ok()) {
+      // Without an explicit inverted arg, spin with the saved flag.
+      const bool inverted = server.hasArg("inverted")
+                                ? server.arg("inverted") == "1"
+                                : motors.slotCalibration(slot).inverted;
+      motors.calibrationSpin(slot, payout, inverted);
+    }
   }
   motionActive = currentMotion() != Motion::Stopped;
   sendJson(200, statusJson());
@@ -388,10 +398,16 @@ void handleCalibrationSave() {
     assignments[i].inverted = server.arg(invertedKey) == "1";
   }
 
+  bool locked = false;
   bool applied = false;
   {
     MotorMutexGuard guard;
-    if (guard.ok()) applied = motors.applyCalibration(assignments);
+    locked = guard.ok();
+    if (locked) applied = motors.applyCalibration(assignments);
+  }
+  if (!locked) {
+    sendJson(503, F("{\"error\":\"Controller busy, try saving again\"}"));
+    return;
   }
   if (!applied) {
     sendJson(409,

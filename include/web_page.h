@@ -625,7 +625,7 @@ const char kControlPage[] PROGMEM = R"HTML(
   }
 
   bindHold('[data-motion]', button => ['/api/move', 'direction=' + encodeURIComponent(button.dataset.motion)]);
-  bindHold('[data-cal-dir]', button => ['/api/calibration/spin', `slot=${button.dataset.calSlot}&direction=${button.dataset.calDir}`]);
+  bindHold('[data-cal-dir]', button => ['/api/calibration/spin', `slot=${button.dataset.calSlot}&direction=${button.dataset.calDir}&inverted=${calInverted[Number(button.dataset.calSlot)] ? 1 : 0}`]);
 
   document.querySelectorAll('[data-tab]').forEach(tab => {
     tab.addEventListener('click', () => {
@@ -673,7 +673,7 @@ const char kControlPage[] PROGMEM = R"HTML(
     });
     message.textContent = 'Saving…';
     const ok = await post('/api/calibration/save', params.toString());
-    message.textContent = ok ? 'Calibration saved.' : 'Save failed — each corner must be used exactly once.';
+    message.textContent = ok ? 'Calibration saved.' : `Save failed — ${state.textContent}`;
   });
 
   document.querySelector('#cal-reset').addEventListener('click', async () => {

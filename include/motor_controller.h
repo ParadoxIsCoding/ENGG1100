@@ -68,9 +68,11 @@ class MotorController {
 
   // Calibration: spins exactly one physical motor slot (0..kSlotCount-1) at
   // the fixed Config::kCalibrationSpeedPercent, bypassing the corner mapping
-  // entirely, so the slot can be visually identified. Call repeatedly
-  // (hold-to-run) the same way as apply(); a call to stop() halts it.
-  void calibrationSpin(uint8_t slot, bool payout);
+  // entirely, so the slot can be visually identified. inverted is the
+  // (possibly unsaved) INVERT choice from the calibration tab, so a re-test
+  // after toggling INVERT shows the new direction before it is saved. Call
+  // repeatedly (hold-to-run) the same way as apply(); stop() halts it.
+  void calibrationSpin(uint8_t slot, bool payout, bool inverted);
   int8_t calibrationSlot() const;   // -1 when no calibration spin is active
   bool calibrationPayout() const;   // only meaningful when calibrationSlot() >= 0
 
@@ -98,6 +100,9 @@ class MotorController {
   int8_t joystickX_ = 0;
   int8_t joystickY_ = 0;
   uint8_t speedPercent_ = 0;
+  // Speed the current motion was applied at, so a repeated hold-to-run
+  // command re-applies after a speed change instead of being skipped.
+  uint8_t appliedSpeedPercent_ = 0;
   int16_t frontLeftPower_ = 0;
   int16_t frontRightPower_ = 0;
   int16_t rearLeftPower_ = 0;
