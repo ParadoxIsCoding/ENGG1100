@@ -40,25 +40,32 @@ constexpr uint8_t kCalibrationSpeedPercent = 80;
 
 #if BOARD_S3
 // ------------------------------------------------------------------------
-// Placeholder ESP32-S3 N16R8 GPIO map. This board is NOT physically wired
-// yet; these numbers are carried over from the standard-ESP32 map only as a
-// starting point. Before wiring the S3, re-check every pin against the
-// actual module pinout: avoid strapping pins (0, 3, 45, 46) and, in
-// qio_opi (octal PSRAM) mode as configured in platformio.ini, avoid
-// GPIO 26-32 and 33-37, which the S3 module uses internally for flash/PSRAM.
-// Do NOT assume this list is safe until it has been checked.
+// ESP32-S3 N16R8 GPIO map, for the VCC-GND Studio YD-ESP32-S3 (silkscreen
+// "YD-ESP32-23-2022-V1.3"), which follows the ESP32-S3-DevKitC-1 pinout.
+// Every pin below is on the same header row (3V3, RST, 4, 5, 6, 7, 15, 16,
+// 17, 18, 8, 3, 46, 9, ...), so the whole harness lands on one side.
+//
+// Deliberately avoided: strapping pins 0, 3, 45, 46; GPIO 19/20 (native
+// USB D-/D+); GPIO 43/44 (UART0, the "COM" USB-C port used for flashing and
+// the serial monitor); GPIO 26-32 (internal flash) and 33-37 (octal PSRAM,
+// N16R8 in qio_opi mode); GPIO 48 (onboard RGB LED). GPIO 22-25 do not
+// exist on the S3.
+//
+// As on the standard ESP32, these are physical wiring slots; which corner
+// each drives is set from the calibration tab. The S3 has exactly 8 LEDC
+// channels, which the 8 DRV8871 inputs use (see motor_controller.cpp).
 // ------------------------------------------------------------------------
-constexpr uint8_t kMotor1PinA = 13;
-constexpr uint8_t kMotor1PinB = 14;
-constexpr uint8_t kMotor2PinA = 16;
-constexpr uint8_t kMotor2PinB = 17;
-constexpr uint8_t kMotor3PinA = 18;
-constexpr uint8_t kMotor3PinB = 19;
-constexpr uint8_t kMotor4PinA = 25;
-constexpr uint8_t kMotor4PinB = 26;
+constexpr uint8_t kMotor1PinA = 4;   // DRV8871 #1, IN1
+constexpr uint8_t kMotor1PinB = 5;   // DRV8871 #1, IN2
+constexpr uint8_t kMotor2PinA = 6;   // DRV8871 #2, IN1
+constexpr uint8_t kMotor2PinB = 7;   // DRV8871 #2, IN2
+constexpr uint8_t kMotor3PinA = 15;  // DRV8871 #3, IN1
+constexpr uint8_t kMotor3PinB = 16;  // DRV8871 #3, IN2
+constexpr uint8_t kMotor4PinA = 17;  // DRV8871 #4, IN1
+constexpr uint8_t kMotor4PinB = 18;  // DRV8871 #4, IN2
 
-constexpr uint8_t kI2cSda = 21;
-constexpr uint8_t kI2cScl = 22;
+constexpr uint8_t kI2cSda = 8;  // GY-521 SDA
+constexpr uint8_t kI2cScl = 9;  // GY-521 SCL
 #else
 // ------------------------------------------------------------------------
 // Standard ESP32 (ESP32-D0WD-V3, esp32dev board definition) GPIO map.

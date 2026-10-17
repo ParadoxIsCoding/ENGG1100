@@ -1,6 +1,6 @@
 # ENGG1100 Station Keeper
 
-Station Keeper is an offline iPhone controller for Team Lavender's floating evacuation-centre prototype. A standard ESP32 (ESP32-D0WD-V3 DevKit, `esp32dev`) creates its own Wi-Fi network, drives four corner tether winches, and reads a GY-521 (MPU6050) tilt sensor. The phone interface provides proportional drive, manual per-corner tether payout/retrieval, a motor speed control, four motor-status cards, pitch and roll, a display-only vertical-motion estimate, a motor calibration tab, and latched emergency stop. The project will later move to an ESP32-S3 N16R8; the `esp32-s3-*` environments exist for that but are not physically wired yet.
+Station Keeper is an offline iPhone controller for Team Lavender's floating evacuation-centre prototype. A standard ESP32 (ESP32-D0WD-V3 DevKit, `esp32dev`) creates its own Wi-Fi network, drives four corner tether winches, and reads a GY-521 (MPU6050) tilt sensor. The phone interface provides proportional drive, manual per-corner tether payout/retrieval, a motor speed control, four motor-status cards, pitch and roll, a display-only vertical-motion estimate, a motor calibration tab, and latched emergency stop. An ESP32-S3 N16R8 (VCC-GND Studio YD-ESP32-S3) is also supported through the `esp32-s3-*` environments, with its own pin map below.
 
 The prototype has no separate propulsion system. A 60 RPM N20 gear motor sits at each of the house's four corners, each with a 3D-printed pulley spooling fishing line to a fixed anchor point in that corner's direction. Reeling a corner's line in pulls the house that way; the opposing corner(s) must pay their line out at the same time, so all station-keeping and station-return movement comes from differentially driving the four winches — there are no poles or rigid channels, matching the project's dimensional constraints.
 
@@ -17,7 +17,7 @@ The MPU6050 can indicate short **RISING**, **FALLING**, and **STEADY** movements
 
 ## Complete signal wiring
 
-Use the GPIO numbers printed below, not a board vendor's `D` numbers. Each corner winch is one 60 RPM N20 gear motor with a 3D-printed pulley spooling fishing line to a fixed anchor point in that corner's direction. Each winch has its own single-channel DRV8871 H-bridge module (four installed, one spare from the 5-pack); there is no separate propulsion motor set. Pin numbers below are for the standard ESP32 (`esp32-hardware`); see `include/config.h` for the placeholder ESP32-S3 map.
+Use the GPIO numbers printed below, not a board vendor's `D` numbers. Each corner winch is one 60 RPM N20 gear motor with a 3D-printed pulley spooling fishing line to a fixed anchor point in that corner's direction. Each winch has its own single-channel DRV8871 H-bridge module (four installed, one spare from the 5-pack); there is no separate propulsion motor set. Pin numbers below are for the standard ESP32 (`esp32-hardware`); the ESP32-S3 (`esp32-s3-hardware`) uses different pins, listed under "ESP32-S3 wiring" below.
 
 The four rows below are labelled "Motor 1"–"Motor 4" rather than by corner on purpose: which corner each one actually drives, and whether it needs to spin inverted, is **not** set in firmware. Wire them in whatever order is physically convenient, then use the phone UI's **CALIBRATE** tab to spin each motor and tell the controller which corner it is — see "Motor calibration" below.
 
@@ -52,6 +52,22 @@ Do not use GPIO 6-11 on the standard ESP32: they are tied to the module's intern
 Motor 4 was moved from GPIO 25/26 to GPIO 32/33 after one of the original pins held its DRV8871 input HIGH even when stopped (the fault followed the pins across a replacement module). Leave GPIO 25/26 unused.
 
 Motor 1 `IN2` was moved from GPIO 14 to GPIO 27 because GPIO 14 outputs a signal while the ESP32 boots (before any firmware runs), which spun Motor 1 for about half a second at every power-up or reset. Leave GPIO 14 unused for motor inputs.
+
+### ESP32-S3 wiring (YD-ESP32-S3 N16R8)
+
+The ESP32-S3 has a different set of usable pins, so it uses its own map (`esp32-s3-hardware`). The board is the VCC-GND Studio YD-ESP32-S3 (back silkscreen `YD-ESP32-23-2022-V1.3`), which follows the ESP32-S3-DevKitC-1 pinout. Every pin below is on the **same header row** as `3V3`/`RST`; the DRV8871 power, motor, and ground wiring is identical to the standard ESP32.
+
+| Device | Terminal | ESP32-S3 |
+|---|---|---:|
+| DRV8871 #1 (Motor 1) | `IN1`, `IN2` | GPIO `4`, GPIO `5` |
+| DRV8871 #2 (Motor 2) | `IN1`, `IN2` | GPIO `6`, GPIO `7` |
+| DRV8871 #3 (Motor 3) | `IN1`, `IN2` | GPIO `15`, GPIO `16` |
+| DRV8871 #4 (Motor 4) | `IN1`, `IN2` | GPIO `17`, GPIO `18` |
+| DRV8871 #1–#4 | logic `GND` | ESP32-S3 `GND` (common ground) |
+| GY-521 (MPU6050) | `SDA`, `SCL` | GPIO `8`, GPIO `9` |
+| GY-521 (MPU6050) | `VCC`, `GND` | `3V3`, `GND` |
+
+On the S3, do not use GPIO 0, 3, 45, 46 (strapping), 19/20 (native USB), 43/44 (serial/flashing), 26–37 (internal flash and octal PSRAM on the N16R8), or 48 (onboard RGB LED). GPIO 22–25 do not exist on the S3. The board has two USB-C ports: use the one labelled **COM** for flashing and the serial monitor.
 
 Connect each motor only to its own module's `OUT1`/`OUT2` terminals. Never parallel two DRV8871 outputs or share one motor between modules. The DRV8871 has no separate logic-supply pin: it runs from its motor supply (`VM`) and accepts the ESP32's 3.3 V logic directly, referenced to the shared `GND`. Terminal names vary slightly between module vendors (e.g. `VM`/`+`, `GND`/`-`), so check the silkscreen on your module.
 
@@ -126,8 +142,8 @@ Four PlatformIO environments are defined in `platformio.ini`:
 |---|---|---|---|
 | `esp32-test` (default) | Standard ESP32 | 1 | Hardware-free; motors and MPU6050 simulated |
 | `esp32-hardware` | Standard ESP32 | 0 | The board currently on the bench, four physical DRV8871 modules + optional GY-521 |
-| `esp32-s3-test` | ESP32-S3 N16R8 | 1 | Future board, hardware-free |
-| `esp32-s3-hardware` | ESP32-S3 N16R8 | 0 | Future board; GPIO map in `config.h` is a placeholder, not yet wired |
+| `esp32-s3-test` | ESP32-S3 N16R8 | 1 | ESP32-S3, hardware-free |
+| `esp32-s3-hardware` | ESP32-S3 N16R8 | 0 | YD-ESP32-S3 with four DRV8871 modules + optional GY-521; see "ESP32-S3 wiring" |
 
 ```bash
 cd ~/Desktop/ENGG1100
@@ -150,7 +166,7 @@ At startup the serial monitor reports the firmware mode, board type, all 8 motor
 Use this order after first wiring the DRV8871 modules, and after any rewiring:
 
 1. **Unpowered checks.** With the XT30 motor supply disconnected and USB unplugged, confirm continuity from supply negative to every DRV8871 `GND`, the buck converter `GND`, and ESP32 `GND`. Confirm no continuity between the motor supply positive and ESP32 `3V3`, `5V`/`VIN`, or any GPIO. Confirm each motor is on its own module's `OUT1`/`OUT2`, and that `VM`/`GND` polarity on every module is correct: reversed supply polarity can destroy the DRV8871.
-2. **Logic only.** Power the ESP32 alone (USB), with motor power still disconnected. Upload `esp32-hardware`, open the serial monitor, and check it reports `IN1`/`IN2` GPIO 13/14, 16/17, 18/19, 32/33 for Motor 1–4 and that all motors are STOPPED.
+2. **Logic only.** Power the ESP32 alone (USB), with motor power still disconnected. Upload `esp32-hardware`, open the serial monitor, and check it reports `IN1`/`IN2` GPIO 13/27, 16/17, 18/19, 32/33 for Motor 1–4 and that all motors are STOPPED.
 3. **Check the stopped state.** With motor power still disconnected, measure each `IN1`/`IN2` to `GND`. All eight should read about 0 V.
 4. **Motor power, supervised.** Support the prototype so no winch is loaded, fit the lines loose or off, keep a hand on the master switch/E-stop, then connect motor power. No motor should move. If any does, switch off immediately and recheck wiring.
 5. **One motor at a time.** On the **CALIBRATE** tab, briefly hold **OUT** then **IN** on each motor card. Only that one motor should turn, in both directions. Label its corner and set **INVERT** as needed, then **SAVE CALIBRATION**.
