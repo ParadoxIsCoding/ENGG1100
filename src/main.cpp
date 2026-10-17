@@ -134,7 +134,6 @@ CalibrationState currentCalibration() {
 }
 
 String statusJson() {
-  attitude.update();
   String json;
   json.reserve(1024);  // The full status is ~800 bytes; avoid regrowth.
   json = F("{\"motion\":\"");
@@ -160,6 +159,8 @@ String statusJson() {
   json += F(",\"verticalMotion\":\"");
   json += attitude.verticalMotionName();
   json += F("\"");
+  json += F(",\"attitudeEnabled\":");
+  json += Config::kAttitudeSensorEnabled ? F("true") : F("false");
   json += F(",\"attitudeDemo\":");
   json += attitude.demoMode() ? F("true") : F("false");
   json += F(",\"attitudeConnected\":");
@@ -232,6 +233,49 @@ void sendJson(int code, const String& body) {
   server.send(code, "application/json", body);
 }
 
+// Commands from the web page carry the page's session id and an increasing
+// sequence number. STOP and E-STOP record them, and a motion command from the
+// same page with an older sequence number is ignored, so a motion request
+// that reaches the controller after a later STOP (it was still opening its
+// connection when STOP went out on another one) cannot restart the motors.
+uint32_t stopSession = 0;
+uint32_t stopSeq = 0;
+
+bool parseUnsigned(const String& value, uint32_t& result) {
+  char* end = nullptr;
+  const unsigned long parsed = strtoul(value.c_str(), &end, 10);
+  if (end == value.c_str() || *end != '\0') return false;
+  result = static_cast<uint32_t>(parsed);
+  return true;
+}
+
+bool commandTag(uint32_t& session, uint32_t& seq) {
+  return server.hasArg("session") && server.hasArg("seq") &&
+         parseUnsigned(server.arg("session"), session) &&
+         parseUnsigned(server.arg("seq"), seq);
+}
+
+void recordStopTag() {
+  uint32_t session = 0;
+  uint32_t seq = 0;
+  if (!commandTag(session, seq)) return;
+  stopSession = session;
+  stopSeq = seq;
+}
+
+bool supersededByStop() {
+  uint32_t session = 0;
+  uint32_t seq = 0;
+  return commandTag(session, seq) && session == stopSession && seq < stopSeq;
+}
+
+// Replies with the current status without moving anything.
+bool rejectSupersededCommand() {
+  if (!supersededByStop()) return false;
+  sendJson(200, statusJson());
+  return true;
+}
+
 void stopForSafety(const char* reason) {
   lastSafetyReason = reason;
   MotorMutexGuard guard(portMAX_DELAY);
@@ -267,6 +311,8 @@ void handleMove() {
     return;
   }
 
+  if (rejectSupersededCommand()) return;
+
   if (!server.hasArg("direction")) {
     stopForSafety("missing direction");
     sendJson(400, F("{\"error\":\"Missing direction\"}"));
@@ -294,6 +340,8 @@ void handleDrive() {
     return;
   }
 
+  if (rejectSupersededCommand()) return;
+
   int8_t xPercent = 0;
   int8_t yPercent = 0;
   if (!server.hasArg("x") || !server.hasArg("y") ||
@@ -313,6 +361,7 @@ void handleDrive() {
 }
 
 void handleStop() {
+  recordStopTag();
   lastCommandLabel = "stop";
   motionActive = false;
   stopForSafety("stop command");
@@ -320,6 +369,7 @@ void handleStop() {
 }
 
 void handleEmergencyStop() {
+  recordStopTag();
   lastCommandLabel = "estop";
   emergencyStopLatched = true;
   motionActive = false;
@@ -372,6 +422,8 @@ void handleCalibrationSpin() {
     sendJson(423, F("{\"error\":\"Emergency stop is latched\"}"));
     return;
   }
+
+  if (rejectSupersededCommand()) return;
 
   uint8_t slot = 0;
   bool payout;
@@ -531,7 +583,7 @@ void setup() {
   motionActive = false;
   lastValidMotionMs = 0;
 
-  attitude.begin();  // I2C/MPU6050 probe; motor pins are already LOW.
+  attitude.begin();  // Starts the sensor task; I2C never runs on this loop.
 
   WiFi.onEvent(handleClientDisconnected,
                ARDUINO_EVENT_WIFI_AP_STADISCONNECTED);
@@ -565,11 +617,9 @@ void setup() {
                     calibration.slots[i].inverted ? " (inverted)" : "");
     }
   }
-  Serial.printf("MPU6050: %s\n",
-                attitude.connected()
-                    ? "detected"
-                    : (attitude.demoMode() ? "not detected (test-mode demo active)"
-                                            : "not detected"));
+  Serial.println(Config::kAttitudeSensorEnabled
+                     ? "MPU6050: probed in the background (see [attitude] lines)"
+                     : "MPU6050: disabled");
   Serial.printf("Wi-Fi SSID: %s\n", Config::kAccessPointName);
   Serial.printf("Wi-Fi password: %s\n", Config::kAccessPointPassword);
   Serial.printf("IP address: http://%s/\n",
@@ -586,7 +636,6 @@ void setup() {
 }
 
 void loop() {
-  attitude.update();
   server.handleClient();
   delay(1);
 }

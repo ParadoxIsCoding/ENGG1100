@@ -8,6 +8,7 @@ const char kControlPage[] PROGMEM = R"HTML(
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#000000">
   <title>Station Keeper</title>
+  <link rel="icon" href="data:,">
   <style>
     :root {
       color-scheme: dark;
@@ -316,6 +317,16 @@ const char kControlPage[] PROGMEM = R"HTML(
   // command issued meanwhile replaces the queued one (newest wins).
   let motionInFlight = false;
   let queuedMotion = null;
+  // Every motion and stop command carries this page's session id and an
+  // increasing sequence number, so the controller can ignore a motion command
+  // that reaches it after a later STOP (e.g. one still opening its connection
+  // when STOP went out on an already-open one).
+  const sessionId = 1 + Math.floor(Math.random() * 2147483646);
+  let commandSeq = 0;
+  function tagged(body = '') {
+    const tag = `session=${sessionId}&seq=${++commandSeq}`;
+    return body ? `${body}&${tag}` : tag;
+  }
   let speedDragging = false;
   const calCorners = ['front-left', 'front-right', 'rear-left', 'rear-right'];
   const calCorner = [null, null, null, null]; // per motor slot; null = not yet labelled
@@ -469,6 +480,8 @@ const char kControlPage[] PROGMEM = R"HTML(
   }
 
   function renderAttitude(data) {
+    document.querySelector('.attitude-panel').hidden = data.attitudeEnabled === false;
+    if (data.attitudeEnabled === false) return;
     if (!Number.isFinite(data.pitch) || !Number.isFinite(data.roll)) return;
     const levelButton = document.querySelector('#set-level');
     levelButton.disabled = !data.attitudeConnected && !data.attitudeDemo;
@@ -511,7 +524,7 @@ const char kControlPage[] PROGMEM = R"HTML(
       return;
     }
     motionInFlight = true;
-    post(path, body).then(() => {
+    post(path, tagged(body)).then(() => {
       motionInFlight = false;
       const next = queuedMotion;
       queuedMotion = null;
@@ -554,15 +567,16 @@ const char kControlPage[] PROGMEM = R"HTML(
   function endMotion(sendStop = true) {
     const wasActive = heldMotion !== null || joystickPointer !== null || heartbeat !== null;
     clearMotionState();
-    if (sendStop && wasActive) post('/api/stop');
+    if (sendStop && wasActive) post('/api/stop', tagged());
   }
 
   function stopForPageExit() {
     const wasActive = heldMotion !== null || joystickPointer !== null || heartbeat !== null;
     clearMotionState();
     if (!wasActive) return;
-    if (!navigator.sendBeacon || !navigator.sendBeacon('/api/stop', '')) {
-      fetch('/api/stop', {method:'POST',body:'',keepalive:true,cache:'no-store'}).catch(() => {});
+    const body = tagged();
+    if (!navigator.sendBeacon || !navigator.sendBeacon('/api/stop', new URLSearchParams(body))) {
+      fetch('/api/stop', {method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body,keepalive:true,cache:'no-store'}).catch(() => {});
     }
   }
 
@@ -731,8 +745,8 @@ const char kControlPage[] PROGMEM = R"HTML(
   joystick.addEventListener('pointercancel', endMotion);
   joystick.addEventListener('lostpointercapture', endMotion);
 
-  document.querySelector('#stop').addEventListener('click', () => { buzz(); endMotion(false); post('/api/stop'); });
-  document.querySelector('#estop').addEventListener('click', () => { buzz(true); endMotion(false); post('/api/estop'); });
+  document.querySelector('#stop').addEventListener('click', () => { buzz(); endMotion(false); post('/api/stop', tagged()); });
+  document.querySelector('#estop').addEventListener('click', () => { buzz(true); endMotion(false); post('/api/estop', tagged()); });
   reset.addEventListener('click', () => { buzz(); post('/api/estop/clear'); });
   document.querySelector('#set-level').addEventListener('click', () => { buzz(); post('/api/attitude/level'); });
   speedInput.addEventListener('pointerdown', () => { speedDragging = true; });

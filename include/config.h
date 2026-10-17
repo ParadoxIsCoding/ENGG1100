@@ -103,6 +103,9 @@ constexpr uint8_t kI2cScl = 22;  // GY-521 SCL
 // GY-521 (MPU6050) tilt sensor, address 0x68 (AD0 tied low / floating).
 // Set to false to skip I2C/sensor startup entirely; hardware mode still
 // runs with manual motor control only.
-constexpr bool kAttitudeSensorEnabled = true;
+// Disabled: the bench GY-521 failed (ran very hot at 3.3 V) and held the I2C
+// bus, and the controller runs without one. With this false no I2C is
+// started at all and the web UI hides the pitch/roll panel.
+constexpr bool kAttitudeSensorEnabled = false;
 
 }  // namespace Config

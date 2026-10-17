@@ -6,6 +6,8 @@ The prototype has no separate propulsion system. A 60 RPM N20 gear motor sits at
 
 The MPU6050 can indicate short **RISING**, **FALLING**, and **STEADY** movements. The first upward or downward movement is detected sensitively and held on screen for about 1.2 seconds so it is visible on the phone. It does not measure water height or rope tension, and its estimate never controls a motor. A very slow constant water-level change may appear steady because an accelerometer cannot determine absolute height.
 
+**The IMU is currently disabled** (`kAttitudeSensorEnabled = false` in `include/config.h`) because the bench GY-521 failed: it ran very hot even on 3.3 V and held the I2C bus. With it disabled the firmware never starts I2C and the phone UI hides the pitch/roll panel and **SET LEVEL**. The wiring below is kept for when a replacement sensor is fitted; set the flag back to `true` to re-enable it.
+
 ## Wi-Fi and controller address
 
 | Setting | Value |
