@@ -45,6 +45,10 @@ void AttitudeSensor::begin() {
 
   Wire.begin(Config::kI2cSda, Config::kI2cScl);
   Wire.setClock(400000);
+  // A healthy transaction takes well under 1 ms at 400 kHz. The default 50 ms
+  // timeout would let a missing or faulty sensor holding the bus stall the
+  // web server on every probe.
+  Wire.setTimeOut(10);
   connected_ = connectSensor();
   update();
   setLevel();

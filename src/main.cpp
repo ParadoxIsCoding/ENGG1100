@@ -10,7 +10,29 @@
 
 namespace {
 
-WebServer server(Config::kHttpPort);
+// The core WebServer serves one connection at a time and, once a connection
+// is open, waits up to HTTP_MAX_DATA_WAIT (5 s) for it to send a request,
+// accepting nobody else meanwhile. Phone browsers open spare connections in
+// advance and may leave them idle, which would stall every motion command
+// and STOP behind them for seconds. This drops an idle connection only when
+// another one is already waiting to be served.
+class ResponsiveWebServer : public WebServer {
+ public:
+  using WebServer::WebServer;
+
+  void handleClient() override {
+    if (_currentStatus == HC_WAIT_READ && !_currentClient.available() &&
+        millis() - _statusChange > Config::kHttpIdleClientGraceMs &&
+        _server.hasClient()) {
+      _currentClient.stop();
+      _currentClient = WiFiClient();
+      _currentStatus = HC_NONE;
+    }
+    WebServer::handleClient();
+  }
+};
+
+ResponsiveWebServer server(Config::kHttpPort);
 MotorController motors;
 AttitudeSensor attitude;
 SemaphoreHandle_t motorMutex = nullptr;
@@ -114,7 +136,7 @@ CalibrationState currentCalibration() {
 String statusJson() {
   attitude.update();
   String json;
-  json.reserve(320);
+  json.reserve(1024);  // The full status is ~800 bytes; avoid regrowth.
   json = F("{\"motion\":\"");
   json += motionName(currentMotion());
   json += F("\",\"estop\":");
@@ -488,6 +510,9 @@ void setup() {
   // 5. Emergency-stop/failsafe state initialised. 6. I2C/MPU6050 probe.
   // 7-8. Wi-Fi AP and web server. All motor-control pins are LOW before any
   // of steps 6-8 run.
+  // Large enough that motion logging never blocks a web request waiting for
+  // the 115200-baud UART to drain.
+  Serial.setTxBufferSize(1024);
   Serial.begin(115200);
 
   motors.begin();  // Configures all 8 DRV8871 IN1/IN2 GPIOs as outputs,
@@ -563,5 +588,5 @@ void setup() {
 void loop() {
   attitude.update();
   server.handleClient();
-  delay(2);
+  delay(1);
 }
