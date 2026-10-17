@@ -309,9 +309,13 @@ const char kControlPage[] PROGMEM = R"HTML(
   let joystickX = 0;
   let joystickY = 0;
   let heartbeat = null;
-  let lastDriveSent = 0;
   let requestSequence = 0;
   let statusInFlight = false;
+  // The ESP32 WebServer handles one request at a time, so motion commands
+  // must never pile up behind each other: at most one is in flight, and any
+  // command issued meanwhile replaces the queued one (newest wins).
+  let motionInFlight = false;
+  let queuedMotion = null;
   let speedDragging = false;
   const calCorners = ['front-left', 'front-right', 'rear-left', 'rear-right'];
   const calCorner = [null, null, null, null]; // per motor slot; null = not yet labelled
@@ -497,8 +501,28 @@ const char kControlPage[] PROGMEM = R"HTML(
     document.querySelector('.horizon').setAttribute('aria-label', `Pitch ${pitch.toFixed(1)} degrees, roll ${roll.toFixed(1)} degrees`);
   }
 
+  function motionHeld() {
+    return heldMotion !== null || joystickPointer !== null;
+  }
+
+  function sendMotion(path, body) {
+    if (motionInFlight) {
+      queuedMotion = {path, body};
+      return;
+    }
+    motionInFlight = true;
+    post(path, body).then(() => {
+      motionInFlight = false;
+      const next = queuedMotion;
+      queuedMotion = null;
+      if (next && motionHeld()) sendMotion(next.path, next.body);
+    });
+  }
+
   async function refreshStatus() {
-    if (document.hidden || statusInFlight) return;
+    // While a control is held, every motion response already carries the
+    // full status, so polling would only compete with the motion commands.
+    if (document.hidden || statusInFlight || motionHeld() || motionInFlight) return;
     statusInFlight = true;
     try {
       const response = await fetch('/api/status', {cache:'no-store'});
@@ -517,6 +541,7 @@ const char kControlPage[] PROGMEM = R"HTML(
   function clearMotionState() {
     if (heartbeat) clearInterval(heartbeat);
     heartbeat = null;
+    queuedMotion = null;
     heldMotion = null;
     joystickPointer = null;
     joystickX = 0;
@@ -545,11 +570,11 @@ const char kControlPage[] PROGMEM = R"HTML(
     return `x=${joystickX}&y=${joystickY}`;
   }
 
-  function sendJoystick(force = false) {
-    const now = performance.now();
-    if (!force && now - lastDriveSent < 60) return;
-    lastDriveSent = now;
-    post('/api/drive', driveBody());
+  function sendJoystick() {
+    // No time-based throttle: sendMotion already limits the rate to one
+    // request in flight, and dropping a move here could lose the final
+    // stick position until the next heartbeat.
+    sendMotion('/api/drive', driveBody());
   }
 
   function updateJoystick(clientX, clientY) {
@@ -588,7 +613,7 @@ const char kControlPage[] PROGMEM = R"HTML(
     const armDelayMs = 90;
     const moveCancelPx = 10;
     document.querySelectorAll(selector).forEach(button => {
-      const send = () => post(...buildRequest(button));
+      const send = () => sendMotion(...buildRequest(button));
       let armTimer = null;
       let startX = 0;
       let startY = 0;
@@ -693,8 +718,8 @@ const char kControlPage[] PROGMEM = R"HTML(
     joystick.classList.add('active');
     joystick.setPointerCapture(event.pointerId);
     updateJoystick(event.clientX, event.clientY);
-    sendJoystick(true);
-    heartbeat = setInterval(() => joystickPointer !== null && sendJoystick(true), 200);
+    sendJoystick();
+    heartbeat = setInterval(() => joystickPointer !== null && sendJoystick(), 200);
   });
   joystick.addEventListener('pointermove', event => {
     if (event.pointerId !== joystickPointer) return;
@@ -722,7 +747,7 @@ const char kControlPage[] PROGMEM = R"HTML(
   document.addEventListener('visibilitychange', () => document.hidden && stopForPageExit());
   window.addEventListener('contextmenu', event => event.preventDefault());
   refreshStatus();
-  setInterval(refreshStatus, 50);
+  setInterval(refreshStatus, 100);
 })();
 </script>
 </body>
