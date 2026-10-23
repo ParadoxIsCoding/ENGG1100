@@ -98,6 +98,14 @@ const char* motionName(Motion motion) {
       return "all-payout";
     case Motion::AllRetrieve:
       return "all-retrieve";
+    case Motion::LeftSidePayout:
+      return "left-side-payout";
+    case Motion::LeftSideRetrieve:
+      return "left-side-retrieve";
+    case Motion::RightSidePayout:
+      return "right-side-payout";
+    case Motion::RightSideRetrieve:
+      return "right-side-retrieve";
     case Motion::FrontLeftPayout:
       return "front-left-payout";
     case Motion::FrontLeftRetrieve:
@@ -141,6 +149,14 @@ bool parseMotion(const String& value, Motion& motion) {
     motion = Motion::AllPayout;
   } else if (value == "all-retrieve") {
     motion = Motion::AllRetrieve;
+  } else if (value == "left-side-payout") {
+    motion = Motion::LeftSidePayout;
+  } else if (value == "left-side-retrieve") {
+    motion = Motion::LeftSideRetrieve;
+  } else if (value == "right-side-payout") {
+    motion = Motion::RightSidePayout;
+  } else if (value == "right-side-retrieve") {
+    motion = Motion::RightSideRetrieve;
   } else if (value == "front-left-payout") {
     motion = Motion::FrontLeftPayout;
   } else if (value == "front-left-retrieve") {
@@ -342,6 +358,22 @@ void MotorController::apply(Motion motion) {
       driveCorner(Corner::FrontLeft, p);
       driveCorner(Corner::FrontRight, p);
       driveCorner(Corner::RearLeft, p);
+      driveCorner(Corner::RearRight, p);
+      break;
+    case Motion::LeftSidePayout:
+      driveCorner(Corner::FrontLeft, -p);
+      driveCorner(Corner::RearLeft, -p);
+      break;
+    case Motion::LeftSideRetrieve:
+      driveCorner(Corner::FrontLeft, p);
+      driveCorner(Corner::RearLeft, p);
+      break;
+    case Motion::RightSidePayout:
+      driveCorner(Corner::FrontRight, -p);
+      driveCorner(Corner::RearRight, -p);
+      break;
+    case Motion::RightSideRetrieve:
+      driveCorner(Corner::FrontRight, p);
       driveCorner(Corner::RearRight, p);
       break;
     case Motion::FrontLeftPayout:

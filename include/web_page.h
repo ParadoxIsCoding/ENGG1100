@@ -75,6 +75,8 @@ const char kControlPage[] PROGMEM = R"HTML(
     .secondary { display: grid; width: 100%; grid-template-columns: 1fr 1fr; gap: .55rem; }
     .tether-controls { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
     .tether-controls button { min-height: 5.4rem; font-size: 1rem; }
+    .side-controls { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin-top: .6rem; }
+    .side-controls button { min-height: 3.6rem; font-size: .88rem; }
     .house-plan { margin-top: .6rem; padding: .45rem; border: 1px solid var(--border); border-radius: .9rem; background: var(--panel); }
     .house-edge { color: var(--muted); font-size: .64rem; font-weight: 750; letter-spacing: .08em; text-align: center; }
     .house-edge.near { margin-top: .4rem; padding-top: .35rem; border-top: 3px solid var(--dim); color: var(--text); }
@@ -124,7 +126,7 @@ const char kControlPage[] PROGMEM = R"HTML(
     #cal-save:disabled { opacity: .4; }
     #cal-message { min-height: 1.1rem; margin: .5rem 0 0; text-align: center; font-size: .78rem; font-weight: 750; color: var(--muted); }
     [hidden] { display: none; }
-    @media (max-height: 700px) { .attitude-panel { grid-template-columns: 5.7rem 1fr; } .horizon { width: 5.7rem; } .joystick { width: min(48vw,11.5rem); } .tether-controls button { min-height: 4.2rem; } .corner button { min-height: 3.1rem; } }
+    @media (max-height: 700px) { .attitude-panel { grid-template-columns: 5.7rem 1fr; } .horizon { width: 5.7rem; } .joystick { width: min(48vw,11.5rem); } .tether-controls button { min-height: 4.2rem; } .side-controls button { min-height: 3.1rem; } .corner button { min-height: 3.1rem; } }
     @media (orientation: landscape) and (max-height: 520px) { main { width: min(100%,50rem); padding-bottom: calc(5.3rem + env(safe-area-inset-bottom)); } header { position: absolute; top: max(.45rem,env(safe-area-inset-top)); left: .75rem; right: .75rem; } .panel { width: 42%; margin-top: 2.5rem; } .tabs { width: 42%; } .control-view { position: absolute; top: max(.45rem,env(safe-area-inset-top)); right: .75rem; width: 53%; } .joystick { width: min(45vh,11rem); } .safety-dock { width: min(100%,50rem); } }
   </style>
 </head>
@@ -197,6 +199,12 @@ const char kControlPage[] PROGMEM = R"HTML(
     <div class="tether-controls">
       <button data-motion="all-payout" aria-label="Hold to pay all four tethers out">↑<br>ALL OUT</button>
       <button data-motion="all-retrieve" aria-label="Hold to take all four tethers in">↓<br>ALL IN</button>
+    </div>
+    <div class="side-controls">
+      <button data-motion="left-side-payout" aria-label="Hold to pay both left-side tethers (FL and RL) out">LEFT ↑ OUT</button>
+      <button data-motion="right-side-payout" aria-label="Hold to pay both right-side tethers (FR and RR) out">RIGHT ↑ OUT</button>
+      <button data-motion="left-side-retrieve" aria-label="Hold to take both left-side tethers (FL and RL) in">LEFT ↓ IN</button>
+      <button data-motion="right-side-retrieve" aria-label="Hold to take both right-side tethers (FR and RR) in">RIGHT ↓ IN</button>
     </div>
     <div class="house-plan" aria-label="Corner winches laid out as seen standing at the doors">
       <div class="house-edge far">FAR SIDE</div>
@@ -413,6 +421,10 @@ const char kControlPage[] PROGMEM = R"HTML(
       data.motion === 'joystick' ? `JOYSTICK  X ${data.x} · Y ${data.y}` :
       data.motion === 'all-payout' ? 'TETHERS: ALL PAYING OUT' :
       data.motion === 'all-retrieve' ? 'TETHERS: ALL TAKING IN' :
+      data.motion === 'left-side-payout' ? 'TETHERS: LEFT SIDE PAYING OUT' :
+      data.motion === 'left-side-retrieve' ? 'TETHERS: LEFT SIDE TAKING IN' :
+      data.motion === 'right-side-payout' ? 'TETHERS: RIGHT SIDE PAYING OUT' :
+      data.motion === 'right-side-retrieve' ? 'TETHERS: RIGHT SIDE TAKING IN' :
       data.motion.replace(/-/g, ' ').toUpperCase();
     reset.hidden = !data.estop;
     renderAttitude(data);
