@@ -75,8 +75,15 @@ const char kControlPage[] PROGMEM = R"HTML(
     .secondary { display: grid; width: 100%; grid-template-columns: 1fr 1fr; gap: .55rem; }
     .tether-controls { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
     .tether-controls button { min-height: 5.4rem; font-size: 1rem; }
-    .trim-controls { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin-top: .6rem; }
-    .trim-controls button { min-height: 4rem; font-size: .88rem; }
+    .house-plan { margin-top: .6rem; padding: .45rem; border: 1px solid var(--border); border-radius: .9rem; background: var(--panel); }
+    .house-edge { color: var(--muted); font-size: .64rem; font-weight: 750; letter-spacing: .08em; text-align: center; }
+    .house-edge.near { margin-top: .4rem; padding-top: .35rem; border-top: 3px solid var(--dim); color: var(--text); }
+    .house-edge.far { margin-bottom: .4rem; }
+    .corner-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+    .corner { display: grid; gap: .4rem; padding: .4rem; border: 1px solid var(--border-soft); border-radius: .75rem; background: var(--panel-alt); }
+    .corner-name { display: flex; align-items: baseline; justify-content: space-between; padding: 0 .2rem; font-size: .95rem; font-weight: 800; }
+    .corner-name small { color: var(--muted); font-size: .6rem; font-weight: 750; letter-spacing: .06em; }
+    .corner button { min-height: 3.6rem; font-size: .9rem; }
     .safety-dock { position: fixed; z-index: 20; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: .8fr 1.2fr; gap: .55rem; width: min(100%,30rem); margin: auto; padding: .6rem .75rem max(.6rem,env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: #000000f2; box-shadow: 0 -.4rem 1rem #0007; backdrop-filter: blur(12px); }
     .stop { background: var(--red-wash); border-color: var(--red); color: var(--red); font-size: 1rem; }
     .estop { background: var(--red); border-color: var(--red); color: #fff; font-size: 1rem; }
@@ -117,7 +124,7 @@ const char kControlPage[] PROGMEM = R"HTML(
     #cal-save:disabled { opacity: .4; }
     #cal-message { min-height: 1.1rem; margin: .5rem 0 0; text-align: center; font-size: .78rem; font-weight: 750; color: var(--muted); }
     [hidden] { display: none; }
-    @media (max-height: 700px) { .attitude-panel { grid-template-columns: 5.7rem 1fr; } .horizon { width: 5.7rem; } .joystick { width: min(48vw,11.5rem); } .tether-controls button { min-height: 4.2rem; } .trim-controls button { min-height: 3.4rem; } }
+    @media (max-height: 700px) { .attitude-panel { grid-template-columns: 5.7rem 1fr; } .horizon { width: 5.7rem; } .joystick { width: min(48vw,11.5rem); } .tether-controls button { min-height: 4.2rem; } .corner button { min-height: 3.1rem; } }
     @media (orientation: landscape) and (max-height: 520px) { main { width: min(100%,50rem); padding-bottom: calc(5.3rem + env(safe-area-inset-bottom)); } header { position: absolute; top: max(.45rem,env(safe-area-inset-top)); left: .75rem; right: .75rem; } .panel { width: 42%; margin-top: 2.5rem; } .tabs { width: 42%; } .control-view { position: absolute; top: max(.45rem,env(safe-area-inset-top)); right: .75rem; width: 53%; } .joystick { width: min(45vh,11rem); } .safety-dock { width: min(100%,50rem); } }
   </style>
 </head>
@@ -191,15 +198,31 @@ const char kControlPage[] PROGMEM = R"HTML(
       <button data-motion="all-payout" aria-label="Hold to pay all four tethers out">↑<br>ALL OUT</button>
       <button data-motion="all-retrieve" aria-label="Hold to take all four tethers in">↓<br>ALL IN</button>
     </div>
-    <div class="trim-controls">
-      <button data-motion="front-left-payout" aria-label="Hold to pay the front-left tether out">FL ↑ OUT</button>
-      <button data-motion="front-left-retrieve" aria-label="Hold to take the front-left tether in">FL ↓ IN</button>
-      <button data-motion="front-right-payout" aria-label="Hold to pay the front-right tether out">FR ↑ OUT</button>
-      <button data-motion="front-right-retrieve" aria-label="Hold to take the front-right tether in">FR ↓ IN</button>
-      <button data-motion="rear-left-payout" aria-label="Hold to pay the rear-left tether out">RL ↑ OUT</button>
-      <button data-motion="rear-left-retrieve" aria-label="Hold to take the rear-left tether in">RL ↓ IN</button>
-      <button data-motion="rear-right-payout" aria-label="Hold to pay the rear-right tether out">RR ↑ OUT</button>
-      <button data-motion="rear-right-retrieve" aria-label="Hold to take the rear-right tether in">RR ↓ IN</button>
+    <div class="house-plan" aria-label="Corner winches laid out as seen standing at the doors">
+      <div class="house-edge far">FAR SIDE</div>
+      <div class="corner-grid">
+        <div class="corner">
+          <div class="corner-name">FL <small>FAR LEFT</small></div>
+          <button data-motion="front-left-payout" aria-label="Hold to pay the front-left tether out">↑ OUT</button>
+          <button data-motion="front-left-retrieve" aria-label="Hold to take the front-left tether in">↓ IN</button>
+        </div>
+        <div class="corner">
+          <div class="corner-name">FR <small>FAR RIGHT</small></div>
+          <button data-motion="front-right-payout" aria-label="Hold to pay the front-right tether out">↑ OUT</button>
+          <button data-motion="front-right-retrieve" aria-label="Hold to take the front-right tether in">↓ IN</button>
+        </div>
+        <div class="corner">
+          <div class="corner-name">RL <small>NEAR LEFT</small></div>
+          <button data-motion="rear-left-payout" aria-label="Hold to pay the rear-left tether out">↑ OUT</button>
+          <button data-motion="rear-left-retrieve" aria-label="Hold to take the rear-left tether in">↓ IN</button>
+        </div>
+        <div class="corner">
+          <div class="corner-name">RR <small>NEAR RIGHT</small></div>
+          <button data-motion="rear-right-payout" aria-label="Hold to pay the rear-right tether out">↑ OUT</button>
+          <button data-motion="rear-right-retrieve" aria-label="Hold to take the rear-right tether in">↓ IN</button>
+        </div>
+      </div>
+      <div class="house-edge near">DOORS · YOU</div>
     </div>
   </section>
 
